@@ -544,7 +544,7 @@ export default function App(){
                 </div>
                 <h1 style={S.authTitle}>GRAN POLLA<br/><span style={{color:"#f9a825"}}>MUNDIALISTA 2026</span></h1>
                 <p style={S.authSub}>Canadá · México · Estados Unidos</p>
-                <p style={S.authDesc}>La gran polla mundialista liderada y organizada por <strong style={{color:"#f9a825"}}>Carlos Hernando Florez</strong> hace más de 15 años, se convierte cada torneo en un vehículo de diversión para la familia y los amigos.</p>
+                <p style={S.authDesc}La gran POLLA MUNDIALISTA , diversión para la familia y los amigos, inscríbete y disfruta el mundial de otra manera
               </div>
               {authError&&<div style={S.errorBox}>{authError}</div>}
               <input className="scoreIn" style={S.input} placeholder="Correo electrónico" type="email" value={authForm.email}

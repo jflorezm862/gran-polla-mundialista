@@ -655,8 +655,12 @@ export default function App(){
     const unsub=onSnapshot(doc(db,"shared","config"),(snap)=>{
       if(snap.exists()){
         const d=snap.data();
-        setPhase2Open(d.phase2Open||false);
+        console.log("Firebase config:", d);
+        setPhase2Open(d.phase2Open===true);
         setPhase2Deadline(d.phase2Deadline||null);
+      } else {
+        console.log("No config doc found");
+        setPhase2Open(false);
       }
     });
     return unsub;

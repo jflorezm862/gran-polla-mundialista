@@ -617,12 +617,15 @@ export default function App(){
   const [fbUser,setFbUser]=useState(undefined); // undefined = loading
   const [profile,setProfile]=useState(null);    // {name, isAdmin}
   const [results,setResults]=useState({});       // shared – realtime
-  const [allProfiles,setAllProfiles]=useState({}); // {uid: {name}}
+  const [allProfiles,setAllProfiles]=useState({});
   const [myPreds,setMyPreds]=useState({});
   const [myGrpP,setMyGrpP]=useState({});
   const [myChamp,setMyChamp]=useState({});
-  const [allScores,setAllScores]=useState([]);   // [{uid,name,score}]
-  const [submitted,setSubmitted]=useState(false); // pronósticos bloqueados
+  const [allScores,setAllScores]=useState([]);
+  const [submitted,setSubmitted]=useState(false);
+  const [submitted2,setSubmitted2]=useState(false); // fase 2 bloqueada
+  const [phase2Open,setPhase2Open]=useState(false);  // admin abre fase 2
+  const [phase2Deadline,setPhase2Deadline]=useState(null); // fecha límite fase 2
 
   const [page,setPage]=useState("login");
   const [liveStatus,setLiveStatus]=useState(null);
@@ -647,6 +650,18 @@ export default function App(){
     return unsub;
   },[]);
 
+  // ── Listen to shared config (phase2, results) ────────────
+  useEffect(()=>{
+    const unsub=onSnapshot(doc(db,"shared","config"),(snap)=>{
+      if(snap.exists()){
+        const d=snap.data();
+        setPhase2Open(d.phase2Open||false);
+        setPhase2Deadline(d.phase2Deadline||null);
+      }
+    });
+    return unsub;
+  },[]);
+
   // ── Listen to shared results (realtime) ───────────────────
   useEffect(()=>{
     const unsub=onSnapshot(doc(db,"shared","results"),(snap)=>{
@@ -654,8 +669,6 @@ export default function App(){
     });
     return unsub;
   },[]);
-
-  // ── Listen to my predictions (realtime) ──────────────────
   useEffect(()=>{
     if(!fbUser) return;
     const unsub=onSnapshot(doc(db,"predictions",fbUser.uid),(snap)=>{
@@ -665,6 +678,7 @@ export default function App(){
         setMyGrpP(d.groups||{});
         setMyChamp(d.champ||{});
         setSubmitted(d.submitted||false);
+        setSubmitted2(d.submitted2||false);
       }
     });
     return unsub;
@@ -792,7 +806,10 @@ export default function App(){
 
   // ── Save predictions ──────────────────────────────────────
   async function savePrediction(id,h,a,penHome="",penAway=""){
-    if(submitted) return; // bloqueado
+    const isGroup = GROUP_MATCHES.some(m=>m.id===id);
+    if(isGroup && submitted) return;
+    if(!isGroup && submitted2) return;
+    if(!isGroup && !phase2Open) return; // fase 2 no abierta
     const entry={home:h,away:a};
     if(penHome!==""&&penAway!==""){entry.penHome=penHome;entry.penAway=penAway;}
     const updated={...myPreds,[id]:entry};
@@ -806,17 +823,31 @@ export default function App(){
     await setDoc(doc(db,"predictions",fbUser.uid),{groups:updated},{merge:true});
   }
   async function saveChampPrediction(field,value){
-    if(submitted) return;
+    const locked = phase2Open ? submitted2 : submitted;
+    if(locked) return;
     const updated={...myChamp,[field]:value};
     setMyChamp(updated);
     await setDoc(doc(db,"predictions",fbUser.uid),{champ:updated},{merge:true});
   }
 
-  // ── Submit predictions (lock forever) ────────────────────
+  // ── Submit phase 1 (groups) ───────────────────────────────
   async function submitPredictions(){
     await setDoc(doc(db,"predictions",fbUser.uid),{submitted:true,submittedAt:serverTimestamp()},{merge:true});
     setSubmitted(true);
-    addNote("✅ ¡Pronósticos enviados y bloqueados!","result");
+    addNote("✅ ¡Pronósticos Fase 1 enviados!","result");
+  }
+
+  // ── Submit phase 2 (knockouts) ────────────────────────────
+  async function submitPredictions2(){
+    await setDoc(doc(db,"predictions",fbUser.uid),{submitted2:true,submittedAt2:serverTimestamp()},{merge:true});
+    setSubmitted2(true);
+    addNote("✅ ¡Pronósticos Fase 2 enviados!","result");
+  }
+
+  // ── Admin: open/close phase 2 ─────────────────────────────
+  async function adminSetPhase2(open, deadline){
+    await setDoc(doc(db,"shared","config"),{phase2Open:open, phase2Deadline:deadline||null},{merge:true});
+    addNote(`📡 Fase 2 ${open?"ABIERTA":"CERRADA"}`,"result");
   }
 
   // ── Admin: save result ────────────────────────────────────
@@ -1008,7 +1039,9 @@ export default function App(){
         {page==="predict"&&fbUser&&(
           <PredictPage results={results} myPreds={myPreds} myGrpP={myGrpP} myChamp={myChamp}
             savePrediction={savePrediction} saveGroupRank={saveGroupRank} saveChampPrediction={saveChampPrediction}
-            submitted={submitted} submitPredictions={submitPredictions}/>
+            submitted={submitted} submitPredictions={submitPredictions}
+            phase2Open={phase2Open} phase2Deadline={phase2Deadline}
+            submitted2={submitted2} submitPredictions2={submitPredictions2}/>
         )}
 
         {/* LIVE */}
@@ -1047,7 +1080,8 @@ export default function App(){
 
         {/* ADMIN */}
         {page==="admin"&&isAdmin&&(
-          <AdminPage results={results} saveResult={saveResult}/>
+          <AdminPage results={results} saveResult={saveResult}
+            phase2Open={phase2Open} phase2Deadline={phase2Deadline} adminSetPhase2={adminSetPhase2}/>
         )}
       </main>
     </div>
@@ -1055,12 +1089,47 @@ export default function App(){
 }
 
 // ============================================================
+// COUNTDOWN TIMER COMPONENT
+// ============================================================
+function Countdown({deadline}){
+  const [time,setTime]=useState(null);
+  useEffect(()=>{
+    function calc(){
+      const diff=new Date(deadline)-new Date();
+      if(diff<=0){setTime(null);return;}
+      const d=Math.floor(diff/86400000);
+      const h=Math.floor((diff%86400000)/3600000);
+      const m=Math.floor((diff%3600000)/60000);
+      const s=Math.floor((diff%60000)/1000);
+      setTime({d,h,m,s});
+    }
+    calc();
+    const t=setInterval(calc,1000);
+    return()=>clearInterval(t);
+  },[deadline]);
+
+  if(!time) return <span style={{color:"#ef5350",fontWeight:700}}>⏰ ¡Tiempo agotado!</span>;
+
+  return(
+    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+      {[["d","días"],["h","hrs"],["m","min"],["s","seg"]].map(([k,label])=>(
+        <div key={k} style={{textAlign:"center",background:"rgba(0,0,0,.3)",borderRadius:8,padding:"6px 10px",minWidth:52}}>
+          <div style={{fontSize:22,fontWeight:900,color:"#f9a825",lineHeight:1}}>{String(time[k]).padStart(2,"0")}</div>
+          <div style={{fontSize:10,color:"#546e7a",letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
 // PREDICT PAGE
 // ============================================================
-function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRank,saveChampPrediction,submitted,submitPredictions}){
+function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRank,saveChampPrediction,submitted,submitPredictions,phase2Open,phase2Deadline,submitted2,submitPredictions2}){
   const [tab,setTab]=useState("groups");
   const [selGrp,setSelGrp]=useState("A");
   const [showConfirm,setShowConfirm]=useState(false);
+  const [showConfirm2,setShowConfirm2]=useState(false);
   const [submitting,setSubmitting]=useState(false);
 
   async function handleSubmit(){
@@ -1069,8 +1138,13 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
     setShowConfirm(false);
     setSubmitting(false);
   }
+  async function handleSubmit2(){
+    setSubmitting(true);
+    await submitPredictions2();
+    setShowConfirm2(false);
+    setSubmitting(false);
+  }
 
-  // Count filled predictions
   const groupFilled = GROUP_MATCHES.filter(m=>myPreds[m.id]?.home!==undefined&&myPreds[m.id]?.home!=="").length;
   const totalGroup = GROUP_MATCHES.length;
 
@@ -1078,60 +1152,136 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
     <div style={S.section}>
       <h2 style={S.sectionTitle}>🎯 Mis Pronósticos</h2>
 
-      {/* Submit banner */}
+      {/* ── PHASE 1 SUBMIT BANNER ── */}
       {!submitted ? (
         <div style={{background:"rgba(249,168,37,.1)",border:"1px solid rgba(249,168,37,.4)",borderRadius:12,padding:"16px 20px",marginBottom:20}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
             <span style={{fontSize:28,flexShrink:0}}>📋</span>
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:15,color:"#f9a825",marginBottom:4}}>
-                ¡Recuerda enviar tus pronósticos!
+                FASE 1 — Pronósticos de Grupos
               </div>
               <div style={{fontSize:13,color:"#b0bec5",lineHeight:1.6,marginBottom:10}}>
-                Ingresa todos tus pronósticos de grupos, eliminatorias y campeón.
-                Cuando estés listo, presiona <strong style={{color:"#f9a825"}}>ENVIAR PRONÓSTICOS</strong> para bloquearlos.
+                Ingresa tus pronósticos de los <strong style={{color:"#fff"}}>72 partidos de fase de grupos</strong>.
+                Cuando termines presiona <strong style={{color:"#f9a825"}}>ENVIAR PRONÓSTICOS FASE 1</strong>.
                 <strong style={{color:"#ef5350"}}> Una vez enviados no podrás modificarlos.</strong>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
                 <div style={{fontSize:13,color:"#90a4ae"}}>
-                  Grupos completados: <strong style={{color:groupFilled===totalGroup?"#81c784":"#f9a825"}}>{groupFilled}/{totalGroup}</strong>
+                  Completados: <strong style={{color:groupFilled===totalGroup?"#81c784":"#f9a825"}}>{groupFilled}/{totalGroup}</strong>
                 </div>
                 <button style={{background:"linear-gradient(135deg,#f9a825,#ffa726)",color:"#000",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",letterSpacing:.5}}
                   onClick={()=>setShowConfirm(true)}>
-                  🔒 ENVIAR PRONÓSTICOS
+                  🔒 ENVIAR FASE 1
                 </button>
               </div>
             </div>
           </div>
         </div>
       ):(
-        <div style={{background:"rgba(129,199,132,.1)",border:"2px solid #81c784",borderRadius:12,padding:"16px 20px",marginBottom:20,display:"flex",gap:12,alignItems:"center"}}>
-          <span style={{fontSize:28}}>✅</span>
+        <div style={{background:"rgba(129,199,132,.1)",border:"2px solid #81c784",borderRadius:12,padding:"14px 20px",marginBottom:16,display:"flex",gap:12,alignItems:"center"}}>
+          <span style={{fontSize:24}}>✅</span>
           <div>
-            <div style={{fontWeight:800,fontSize:15,color:"#81c784"}}>¡Pronósticos enviados y bloqueados!</div>
-            <div style={{fontSize:13,color:"#90a4ae",marginTop:2}}>Tus pronósticos están registrados. Ya no es posible modificarlos. ¡Buena suerte! ⚽</div>
+            <div style={{fontWeight:800,fontSize:14,color:"#81c784"}}>Fase 1 enviada y bloqueada ✓</div>
+            <div style={{fontSize:12,color:"#546e7a",marginTop:2}}>Pronósticos de grupos registrados correctamente.</div>
           </div>
         </div>
       )}
 
-      {/* Confirm modal */}
+      {/* ── PHASE 2 BANNER ── */}
+      {submitted && !phase2Open && (
+        <div style={{background:"rgba(21,101,192,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:12,padding:"20px",marginBottom:20}}>
+          <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+            <span style={{fontSize:32,flexShrink:0}}>⏳</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:800,fontSize:16,color:"#4fc3f7",marginBottom:8}}>
+                FASE 2 — Eliminatorias
+              </div>
+              <div style={{fontSize:13,color:"#b0bec5",lineHeight:1.7,marginBottom:12}}>
+                Una vez finalice la fase de grupos y se conozcan los <strong style={{color:"#fff"}}>32 clasificados y los cruces oficiales</strong>,
+                se abrirá nuevamente la polla para que completes tus pronósticos de eliminatorias,
+                cuartos, semis y la gran final.
+              </div>
+              <div style={{background:"rgba(0,0,0,.3)",borderRadius:8,padding:"10px 14px",display:"inline-block"}}>
+                <div style={{fontSize:11,color:"#546e7a",letterSpacing:1,marginBottom:6}}>LA POLLA DE ELIMINATORIAS SE ABRIRÁ PRÓXIMAMENTE</div>
+                <div style={{fontSize:13,color:"#90a4ae"}}>📅 El último partido de grupos es el <strong style={{color:"#fff"}}>Sáb 27 Jun</strong></div>
+                <div style={{fontSize:13,color:"#90a4ae",marginTop:4}}>🔔 Recibirás una notificación cuando se abra la Fase 2</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PHASE 2 OPEN — countdown + submit ── */}
+      {submitted && phase2Open && !submitted2 && (
+        <div style={{background:"rgba(30,136,229,.12)",border:"2px solid #1e88e5",borderRadius:12,padding:"20px",marginBottom:20}}>
+          <div style={{fontWeight:800,fontSize:16,color:"#4fc3f7",marginBottom:8}}>
+            🚨 FASE 2 ABIERTA — ¡Completa tus pronósticos de Eliminatorias!
+          </div>
+          <div style={{fontSize:13,color:"#b0bec5",lineHeight:1.6,marginBottom:14}}>
+            Los cruces reales están cargados. Ingresa tus pronósticos de la Ronda de 32, Octavos, Cuartos, Semis y Final.
+            <strong style={{color:"#ef5350"}}> Tienes tiempo hasta:</strong>
+          </div>
+          {phase2Deadline && (
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:12,color:"#546e7a",marginBottom:6}}>⏰ TIEMPO RESTANTE</div>
+              <Countdown deadline={phase2Deadline}/>
+              <div style={{fontSize:11,color:"#546e7a",marginTop:6}}>
+                Fecha límite: {new Date(phase2Deadline).toLocaleString("es-CO",{weekday:"long",day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"})}
+              </div>
+            </div>
+          )}
+          <button style={{background:"linear-gradient(135deg,#1565c0,#1e88e5)",color:"#fff",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",letterSpacing:.5}}
+            onClick={()=>setShowConfirm2(true)}>
+            🔒 ENVIAR FASE 2
+          </button>
+        </div>
+      )}
+
+      {submitted && phase2Open && submitted2 && (
+        <div style={{background:"rgba(129,199,132,.1)",border:"2px solid #81c784",borderRadius:12,padding:"14px 20px",marginBottom:16,display:"flex",gap:12,alignItems:"center"}}>
+          <span style={{fontSize:24}}>✅</span>
+          <div>
+            <div style={{fontWeight:800,fontSize:14,color:"#81c784"}}>Fase 2 enviada y bloqueada ✓</div>
+            <div style={{fontSize:12,color:"#546e7a",marginTop:2}}>Pronósticos de eliminatorias registrados. ¡Buena suerte! 🏆</div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modal fase 1 */}
       {showConfirm&&(
-        <div style={{position:"fixed",top:0,left:0,width:"100%",height:"100%",background:"rgba(0,0,0,.8)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+        <div style={{position:"fixed",top:0,left:0,width:"100%",height:"100%",background:"rgba(0,0,0,.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div style={{background:"#131d2e",border:"2px solid #f9a825",borderRadius:16,padding:32,maxWidth:400,width:"100%",textAlign:"center"}}>
             <div style={{fontSize:48,marginBottom:12}}>🔒</div>
-            <h3 style={{fontSize:20,fontWeight:800,color:"#f9a825",marginBottom:12}}>¿Enviar pronósticos?</h3>
+            <h3 style={{fontSize:20,fontWeight:800,color:"#f9a825",marginBottom:12}}>¿Enviar Fase 1?</h3>
             <p style={{color:"#b0bec5",fontSize:14,lineHeight:1.6,marginBottom:24}}>
-              Esta acción es <strong style={{color:"#ef5350"}}>irreversible</strong>. Una vez enviados, tus pronósticos quedarán bloqueados y no podrás modificarlos durante todo el Mundial.
+              Tus pronósticos de <strong style={{color:"#fff"}}>grupos</strong> quedarán bloqueados.
+              Podrás completar la <strong style={{color:"#4fc3f7"}}>Fase 2 (eliminatorias)</strong> cuando se abra después del 27 de junio.
             </p>
             <div style={{display:"flex",gap:12,justifyContent:"center"}}>
               <button style={{background:"transparent",border:"1px solid #546e7a",color:"#90a4ae",borderRadius:8,padding:"10px 20px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14}}
-                onClick={()=>setShowConfirm(false)} disabled={submitting}>
-                Cancelar
-              </button>
+                onClick={()=>setShowConfirm(false)} disabled={submitting}>Cancelar</button>
               <button style={{background:"linear-gradient(135deg,#f9a825,#ffa726)",color:"#000",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",fontSize:14,...(submitting?{opacity:.6}:{})}}
-                onClick={handleSubmit} disabled={submitting}>
-                {submitting?"Enviando...":"✅ Sí, enviar"}
-              </button>
+                onClick={handleSubmit} disabled={submitting}>{submitting?"Enviando...":"✅ Sí, enviar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modal fase 2 */}
+      {showConfirm2&&(
+        <div style={{position:"fixed",top:0,left:0,width:"100%",height:"100%",background:"rgba(0,0,0,.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"#131d2e",border:"2px solid #1e88e5",borderRadius:16,padding:32,maxWidth:400,width:"100%",textAlign:"center"}}>
+            <div style={{fontSize:48,marginBottom:12}}>🔒</div>
+            <h3 style={{fontSize:20,fontWeight:800,color:"#4fc3f7",marginBottom:12}}>¿Enviar Fase 2?</h3>
+            <p style={{color:"#b0bec5",fontSize:14,lineHeight:1.6,marginBottom:24}}>
+              Tus pronósticos de <strong style={{color:"#fff"}}>eliminatorias</strong> quedarán bloqueados definitivamente. Esta acción es <strong style={{color:"#ef5350"}}>irreversible</strong>.
+            </p>
+            <div style={{display:"flex",gap:12,justifyContent:"center"}}>
+              <button style={{background:"transparent",border:"1px solid #546e7a",color:"#90a4ae",borderRadius:8,padding:"10px 20px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14}}
+                onClick={()=>setShowConfirm2(false)} disabled={submitting}>Cancelar</button>
+              <button style={{background:"linear-gradient(135deg,#1565c0,#1e88e5)",color:"#fff",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",fontSize:14,...(submitting?{opacity:.6}:{})}}
+                onClick={handleSubmit2} disabled={submitting}>{submitting?"Enviando...":"✅ Sí, enviar"}</button>
             </div>
           </div>
         </div>
@@ -1162,39 +1312,50 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
       )}
       {tab==="knockouts"&&(
         <div>
-          {/* Info banner */}
-          <div style={{background:"rgba(30,136,229,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
-            <span style={{fontSize:20,flexShrink:0}}>🧠</span>
-            <div style={{fontSize:13,color:"#90a4ae",lineHeight:1.6}}>
-              Los equipos en cada partido <strong style={{color:"#4fc3f7"}}>se calculan automáticamente</strong> según tus pronósticos de grupos.
-              A medida que avances ingresando resultados, el bracket se actualiza para las siguientes fases.
-            </div>
-          </div>
-          {(()=>{
-            const bracket = buildPersonalBracket(myPreds);
-            return [
-              {key:"round32", label:"Ronda de 32",    ids:["R32_1","R32_2","R32_3","R32_4","R32_5","R32_6","R32_7","R32_8","R32_9","R32_10","R32_11","R32_12","R32_13","R32_14","R32_15","R32_16"]},
-              {key:"round16", label:"Octavos de Final",ids:["R16_1","R16_2","R16_3","R16_4","R16_5","R16_6","R16_7","R16_8"]},
-              {key:"quarters",label:"Cuartos de Final",ids:["QF1","QF2","QF3","QF4"]},
-              {key:"semis",   label:"Semifinales",     ids:["SF1","SF2"]},
-              {key:"third",   label:"🥉 Tercer Lugar", ids:["3RD"]},
-              {key:"final",   label:"⚽ Gran Final",   ids:["FINAL"]},
-            ].map(ph=>(
-              <div key={ph.key} style={S.card}>
-                <h3 style={S.cardTitle}>{ph.label}</h3>
-                {ph.ids.map(id=>{
-                  const bm = bracket[id];
-                  const matchObj = bm
-                    ? {id, phase:ph.key, home:bm.home, away:bm.away, date:bm.date, city:bm.city, label:bm.label}
-                    : {id, phase:ph.key, label:id};
-                  return(
-                    <MatchRow key={id} match={matchObj} pred={myPreds[id]}
-                      result={results[id]} savePrediction={savePrediction} locked={submitted}/>
-                  );
-                })}
+          {!phase2Open ? (
+            <div style={{background:"rgba(21,101,192,.1)",border:"1px solid rgba(30,136,229,.25)",borderRadius:12,padding:"28px 24px",textAlign:"center"}}>
+              <div style={{fontSize:48,marginBottom:12}}>⏳</div>
+              <h3 style={{fontSize:20,fontWeight:800,color:"#4fc3f7",marginBottom:10}}>Eliminatorias — Próximamente</h3>
+              <p style={{color:"#90a4ae",fontSize:14,lineHeight:1.7,maxWidth:480,margin:"0 auto 16px"}}>
+                Esta sección se habilitará una vez finalice la <strong style={{color:"#fff"}}>Fase de Grupos (27 Jun)</strong> y
+                el administrador cargue los cruces oficiales de la Ronda de 32.
+              </p>
+              <div style={{background:"rgba(0,0,0,.25)",borderRadius:8,padding:"12px 20px",display:"inline-block"}}>
+                <div style={{fontSize:12,color:"#546e7a",marginBottom:4}}>ÚLTIMO PARTIDO DE GRUPOS</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#fff"}}>📅 Sábado 27 de Junio, 2026</div>
               </div>
-            ));
-          })()}
+            </div>
+          ):(
+            <>
+              <div style={{background:"rgba(30,136,229,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
+                <span style={{fontSize:20,flexShrink:0}}>🧠</span>
+                <div style={{fontSize:13,color:"#90a4ae",lineHeight:1.6}}>
+                  Los equipos en cada partido corresponden a los <strong style={{color:"#4fc3f7"}}>clasificados reales</strong> de la fase de grupos.
+                  {submitted2&&<strong style={{color:"#ef5350"}}> 🔒 Tus pronósticos están bloqueados.</strong>}
+                </div>
+              </div>
+              {(()=>{
+                const bracket=buildPersonalBracket(myPreds);
+                return [
+                  {key:"round32",label:"Ronda de 32",ids:["R32_1","R32_2","R32_3","R32_4","R32_5","R32_6","R32_7","R32_8","R32_9","R32_10","R32_11","R32_12","R32_13","R32_14","R32_15","R32_16"]},
+                  {key:"round16",label:"Octavos de Final",ids:["R16_1","R16_2","R16_3","R16_4","R16_5","R16_6","R16_7","R16_8"]},
+                  {key:"quarters",label:"Cuartos de Final",ids:["QF1","QF2","QF3","QF4"]},
+                  {key:"semis",label:"Semifinales",ids:["SF1","SF2"]},
+                  {key:"third",label:"🥉 Tercer Lugar",ids:["3RD"]},
+                  {key:"final",label:"⚽ Gran Final",ids:["FINAL"]},
+                ].map(ph=>(
+                  <div key={ph.key} style={S.card}>
+                    <h3 style={S.cardTitle}>{ph.label}{submitted2&&<span style={{fontSize:11,color:"#ef5350",marginLeft:8}}>🔒</span>}</h3>
+                    {ph.ids.map(id=>{
+                      const bm=bracket[id];
+                      const matchObj=bm?{id,phase:ph.key,home:bm.home,away:bm.away,date:bm.date,city:bm.city,label:bm.label}:{id,phase:ph.key,label:id};
+                      return(<MatchRow key={id} match={matchObj} pred={myPreds[id]} result={results[id]} savePrediction={savePrediction} locked={submitted2}/>);
+                    })}
+                  </div>
+                ));
+              })()}
+            </>
+          )}
         </div>
       )}
       {tab==="champion"&&(
@@ -1798,6 +1959,105 @@ function SponsorsPage(){
           style={{display:"inline-block",background:"linear-gradient(135deg,#f9a825,#ffa726)",color:"#000",border:"none",borderRadius:10,padding:"14px 32px",fontWeight:800,fontSize:16,textDecoration:"none",letterSpacing:1}}>
           📧 mundialistagranpolla@gmail.com
         </a>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// ADMIN PAGE
+// ============================================================
+function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2}){
+  const [phase,setPhase]=useState("groups");
+  const [selGrp,setSelGrp]=useState("A");
+  const [deadlineInput,setDeadlineInput]=useState(phase2Deadline||"");
+
+  const phases=[
+    {key:"groups",label:"Grupos"},{key:"round32",label:"Ronda 32"},
+    {key:"round16",label:"Octavos"},{key:"quarters",label:"Cuartos"},
+    {key:"semis",label:"Semis"},{key:"third",label:"3er Lugar"},{key:"final",label:"Final"},
+  ];
+  const matches=phase==="groups"
+    ?GROUP_MATCHES.filter(m=>m.group===selGrp)
+    :KNOCKOUT_ROUNDS.filter(m=>m.phase===phase);
+
+  return(
+    <div style={S.section}>
+      <h2 style={S.sectionTitle}>⚙️ Panel Admin</h2>
+
+      {/* Phase 2 controls */}
+      <div style={{...S.card,border:`1px solid ${phase2Open?"#81c784":"#1a2f4a"}`}}>
+        <h3 style={S.cardTitle}>🚀 Control Fase 2 — Eliminatorias</h3>
+        <div style={{display:"flex",gap:12,alignItems:"flex-start",flexWrap:"wrap",marginBottom:16}}>
+          <div style={{flex:1,minWidth:250}}>
+            <div style={{fontSize:13,color:"#90a4ae",marginBottom:8}}>
+              Estado actual: <strong style={{color:phase2Open?"#81c784":"#ef5350"}}>{phase2Open?"🟢 ABIERTA":"🔴 CERRADA"}</strong>
+            </div>
+            <div style={{fontSize:12,color:"#546e7a",lineHeight:1.6}}>
+              Al abrir la Fase 2, todos los participantes que hayan enviado su Fase 1 podrán ingresar pronósticos de eliminatorias.
+              Asegúrate de haber cargado los resultados reales de grupos antes de abrir.
+            </div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
+          <div style={{flex:1,minWidth:220}}>
+            <div style={{fontSize:12,color:"#546e7a",marginBottom:4}}>Fecha límite Fase 2 (ISO 8601):</div>
+            <input style={{...S.input,fontSize:13}} placeholder="2026-06-29T23:59:00-05:00"
+              value={deadlineInput} onChange={e=>setDeadlineInput(e.target.value)}/>
+            <div style={{fontSize:11,color:"#37474f",marginTop:4}}>Ej: 2026-06-29T23:59:00-05:00 (hora Colombia)</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          <button style={{background:"linear-gradient(135deg,#1b5e20,#2e7d32)",color:"#fff",border:"none",borderRadius:8,padding:"10px 20px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:13}}
+            onClick={()=>adminSetPhase2(true,deadlineInput||null)}>
+            🟢 Abrir Fase 2
+          </button>
+          <button style={{background:"rgba(239,83,80,.15)",border:"1px solid #ef5350",color:"#ef5350",borderRadius:8,padding:"10px 20px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:13}}
+            onClick={()=>adminSetPhase2(false,null)}>
+            🔴 Cerrar Fase 2
+          </button>
+        </div>
+        {phase2Deadline&&(
+          <div style={{marginTop:10,fontSize:12,color:"#90a4ae"}}>
+            Límite actual: {new Date(phase2Deadline).toLocaleString("es-CO",{weekday:"long",day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"})}
+          </div>
+        )}
+      </div>
+
+      {/* Results entry */}
+      <div style={S.tabRow}>
+        {phases.map(p=>(
+          <button key={p.key} onClick={()=>setPhase(p.key)} style={{...S.tab,...(phase===p.key?S.tabActive:{})}}>{p.label}</button>
+        ))}
+      </div>
+      {phase==="groups"&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+          {Object.keys(GROUPS).map(g=>(
+            <button key={g} onClick={()=>setSelGrp(g)} style={{...S.groupTab,...(selGrp===g?S.groupTabActive:{})}}>{g}</button>
+          ))}
+        </div>
+      )}
+      <div style={S.card}>
+        {matches.map(m=>{
+          const res=results[m.id];
+          const [h,setH]=useState(res?.home??"");
+          const [a,setA]=useState(res?.away??"");
+          const saved=res&&res.home!=="";
+          const label=m.label||(m.home&&m.away?`${m.home} vs ${m.away}`:"");
+          return(
+            <div key={m.id} style={{...S.matchRow,...(saved?{borderLeft:"3px solid #81c784",paddingLeft:10}:{})}}>
+              <span style={{flex:1,fontSize:14,fontWeight:600,color:"#cfd8dc",minWidth:140}}>{label}</span>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} placeholder="—"/>
+                <span style={{color:"#f9a825",fontWeight:900,fontSize:22}}>:</span>
+                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} placeholder="—"/>
+                <button style={{background:"#1b5e20",border:"none",borderRadius:6,padding:"7px 14px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}
+                  onClick={()=>{if(h!==""&&a!=="")saveResult(m.id,h,a);}}>✓ Guardar</button>
+              </div>
+              {saved&&<span style={{color:"#81c784",fontSize:12}}>✓ {res.home}–{res.away}</span>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

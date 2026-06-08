@@ -29,13 +29,93 @@ const GROUPS = {
   L:["Inglaterra","Croacia","Ghana","Panamá"],
 };
 
-const GROUP_MATCHES = Object.entries(GROUPS).flatMap(([grp,teams])=>{
-  const p=[];
-  for(let i=0;i<teams.length;i++)
-    for(let j=i+1;j<teams.length;j++)
-      p.push({id:`G${grp}${i}${j}`,phase:"groups",group:grp,home:teams[i],away:teams[j]});
-  return p;
-});
+// Horarios en hora Colombia (COL = ET - 1h)
+const GROUP_MATCHES = [
+  // GRUPO A
+  {id:"GA01",phase:"groups",group:"A",home:"México",away:"Sudáfrica",        date:"Jue 11 Jun",time:"2:00 PM",city:"Ciudad de México"},
+  {id:"GA23",phase:"groups",group:"A",home:"Rep. de Corea",away:"Rep. Checa",date:"Jue 11 Jun",time:"9:00 PM",city:"Zapopan"},
+  {id:"GA02",phase:"groups",group:"A",home:"Rep. Checa",away:"Sudáfrica",    date:"Mié 18 Jun",time:"11:00 AM",city:"Atlanta"},
+  {id:"GA13",phase:"groups",group:"A",home:"México",away:"Rep. de Corea",    date:"Mié 18 Jun",time:"8:00 PM",city:"Zapopan"},
+  {id:"GA03",phase:"groups",group:"A",home:"Rep. Checa",away:"México",       date:"Mar 24 Jun",time:"8:00 PM",city:"Ciudad de México"},
+  {id:"GA12",phase:"groups",group:"A",home:"Sudáfrica",away:"Rep. de Corea", date:"Mar 24 Jun",time:"8:00 PM",city:"Monterrey"},
+  // GRUPO B
+  {id:"GB01",phase:"groups",group:"B",home:"Canadá",away:"Bosnia H.",        date:"Vie 12 Jun",time:"2:00 PM",city:"Toronto"},
+  {id:"GB23",phase:"groups",group:"B",home:"Qatar",away:"Suiza",             date:"Sáb 13 Jun",time:"2:00 PM",city:"Santa Clara"},
+  {id:"GB13",phase:"groups",group:"B",home:"Suiza",away:"Bosnia H.",         date:"Mié 18 Jun",time:"2:00 PM",city:"Inglewood"},
+  {id:"GB02",phase:"groups",group:"B",home:"Canadá",away:"Qatar",            date:"Mié 18 Jun",time:"5:00 PM",city:"Vancouver"},
+  {id:"GB12",phase:"groups",group:"B",home:"Suiza",away:"Canadá",            date:"Mar 24 Jun",time:"2:00 PM",city:"Vancouver"},
+  {id:"GB03",phase:"groups",group:"B",home:"Bosnia H.",away:"Qatar",         date:"Mar 24 Jun",time:"2:00 PM",city:"Seattle"},
+  // GRUPO C
+  {id:"GC01",phase:"groups",group:"C",home:"Brasil",away:"Marruecos",        date:"Sáb 13 Jun",time:"5:00 PM",city:"East Rutherford"},
+  {id:"GC23",phase:"groups",group:"C",home:"Haití",away:"Escocia",           date:"Sáb 13 Jun",time:"8:00 PM",city:"Foxborough"},
+  {id:"GC13",phase:"groups",group:"C",home:"Escocia",away:"Marruecos",       date:"Jue 19 Jun",time:"5:00 PM",city:"Foxborough"},
+  {id:"GC02",phase:"groups",group:"C",home:"Brasil",away:"Haití",            date:"Jue 19 Jun",time:"7:30 PM",city:"Philadelphia"},
+  {id:"GC12",phase:"groups",group:"C",home:"Escocia",away:"Brasil",          date:"Mar 24 Jun",time:"5:00 PM",city:"Miami Gardens"},
+  {id:"GC03",phase:"groups",group:"C",home:"Marruecos",away:"Haití",         date:"Mar 24 Jun",time:"5:00 PM",city:"Atlanta"},
+  // GRUPO D
+  {id:"GD01",phase:"groups",group:"D",home:"USA",away:"Paraguay",            date:"Vie 12 Jun",time:"8:00 PM",city:"Inglewood"},
+  {id:"GD23",phase:"groups",group:"D",home:"Australia",away:"Turquía",       date:"Dom 14 Jun",time:"11:00 PM",city:"Vancouver"},
+  {id:"GD02",phase:"groups",group:"D",home:"USA",away:"Australia",           date:"Jue 19 Jun",time:"2:00 PM",city:"Seattle"},
+  {id:"GD13",phase:"groups",group:"D",home:"Turquía",away:"Paraguay",        date:"Jue 19 Jun",time:"10:00 PM",city:"Santa Clara"},
+  {id:"GD03",phase:"groups",group:"D",home:"Turquía",away:"USA",             date:"Mié 25 Jun",time:"9:00 PM",city:"Inglewood"},
+  {id:"GD12",phase:"groups",group:"D",home:"Paraguay",away:"Australia",      date:"Mié 25 Jun",time:"9:00 PM",city:"Santa Clara"},
+  // GRUPO E
+  {id:"GE01",phase:"groups",group:"E",home:"Alemania",away:"Curazao",        date:"Dom 14 Jun",time:"12:00 PM",city:"Houston"},
+  {id:"GE23",phase:"groups",group:"E",home:"Costa de Marfil",away:"Ecuador", date:"Dom 14 Jun",time:"6:00 PM",city:"Philadelphia"},
+  {id:"GE02",phase:"groups",group:"E",home:"Alemania",away:"Costa de Marfil",date:"Vie 20 Jun",time:"3:00 PM",city:"Toronto"},
+  {id:"GE13",phase:"groups",group:"E",home:"Ecuador",away:"Curazao",         date:"Vie 20 Jun",time:"7:00 PM",city:"Kansas City"},
+  {id:"GE03",phase:"groups",group:"E",home:"Curazao",away:"Costa de Marfil", date:"Mié 25 Jun",time:"3:00 PM",city:"Philadelphia"},
+  {id:"GE12",phase:"groups",group:"E",home:"Ecuador",away:"Alemania",        date:"Mié 25 Jun",time:"3:00 PM",city:"East Rutherford"},
+  // GRUPO F
+  {id:"GF01",phase:"groups",group:"F",home:"Países Bajos",away:"Japón",      date:"Dom 14 Jun",time:"3:00 PM",city:"Arlington"},
+  {id:"GF23",phase:"groups",group:"F",home:"Suecia",away:"Túnez",            date:"Dom 14 Jun",time:"9:00 PM",city:"Monterrey"},
+  {id:"GF02",phase:"groups",group:"F",home:"Países Bajos",away:"Suecia",     date:"Vie 20 Jun",time:"12:00 PM",city:"Houston"},
+  {id:"GF13",phase:"groups",group:"F",home:"Túnez",away:"Japón",             date:"Dom 21 Jun",time:"11:00 PM",city:"Monterrey"},
+  {id:"GF03",phase:"groups",group:"F",home:"Japón",away:"Suecia",            date:"Mié 25 Jun",time:"6:00 PM",city:"Arlington"},
+  {id:"GF12",phase:"groups",group:"F",home:"Túnez",away:"Países Bajos",      date:"Mié 25 Jun",time:"6:00 PM",city:"Kansas City"},
+  // GRUPO G
+  {id:"GG01",phase:"groups",group:"G",home:"Bélgica",away:"Egipto",          date:"Lun 15 Jun",time:"2:00 PM",city:"Seattle"},
+  {id:"GG23",phase:"groups",group:"G",home:"Irán",away:"Nueva Zelanda",      date:"Lun 15 Jun",time:"8:00 PM",city:"Inglewood"},
+  {id:"GG02",phase:"groups",group:"G",home:"Bélgica",away:"Irán",            date:"Dom 21 Jun",time:"2:00 PM",city:"Inglewood"},
+  {id:"GG13",phase:"groups",group:"G",home:"Nueva Zelanda",away:"Egipto",    date:"Dom 21 Jun",time:"8:00 PM",city:"Vancouver"},
+  {id:"GG03",phase:"groups",group:"G",home:"Egipto",away:"Irán",             date:"Vie 26 Jun",time:"10:00 PM",city:"Seattle"},
+  {id:"GG12",phase:"groups",group:"G",home:"Nueva Zelanda",away:"Bélgica",   date:"Vie 26 Jun",time:"10:00 PM",city:"Vancouver"},
+  // GRUPO H
+  {id:"GH01",phase:"groups",group:"H",home:"España",away:"Cabo Verde",       date:"Lun 15 Jun",time:"11:00 AM",city:"Atlanta"},
+  {id:"GH23",phase:"groups",group:"H",home:"Arabia Saudita",away:"Uruguay",  date:"Lun 15 Jun",time:"5:00 PM",city:"Miami Gardens"},
+  {id:"GH02",phase:"groups",group:"H",home:"España",away:"Arabia Saudita",   date:"Dom 21 Jun",time:"11:00 AM",city:"Atlanta"},
+  {id:"GH13",phase:"groups",group:"H",home:"Uruguay",away:"Cabo Verde",      date:"Dom 21 Jun",time:"5:00 PM",city:"Miami Gardens"},
+  {id:"GH03",phase:"groups",group:"H",home:"Cabo Verde",away:"Arabia Saudita",date:"Vie 26 Jun",time:"7:00 PM",city:"Houston"},
+  {id:"GH12",phase:"groups",group:"H",home:"Uruguay",away:"España",          date:"Vie 26 Jun",time:"7:00 PM",city:"Zapopan"},
+  // GRUPO I
+  {id:"GI01",phase:"groups",group:"I",home:"Francia",away:"Senegal",         date:"Mar 16 Jun",time:"2:00 PM",city:"East Rutherford"},
+  {id:"GI23",phase:"groups",group:"I",home:"Irak",away:"Noruega",            date:"Mar 16 Jun",time:"5:00 PM",city:"Foxborough"},
+  {id:"GI02",phase:"groups",group:"I",home:"Francia",away:"Irak",            date:"Lun 22 Jun",time:"4:00 PM",city:"Philadelphia"},
+  {id:"GI13",phase:"groups",group:"I",home:"Noruega",away:"Senegal",         date:"Lun 22 Jun",time:"7:00 PM",city:"East Rutherford"},
+  {id:"GI03",phase:"groups",group:"I",home:"Noruega",away:"Francia",         date:"Jue 26 Jun",time:"2:00 PM",city:"Foxborough"},
+  {id:"GI12",phase:"groups",group:"I",home:"Senegal",away:"Irak",            date:"Jue 26 Jun",time:"2:00 PM",city:"Toronto"},
+  // GRUPO J
+  {id:"GJ01",phase:"groups",group:"J",home:"Argentina",away:"Algeria",       date:"Mar 16 Jun",time:"8:00 PM",city:"Kansas City"},
+  {id:"GJ23",phase:"groups",group:"J",home:"Austria",away:"Jordania",        date:"Mié 17 Jun",time:"11:00 PM",city:"Santa Clara"},
+  {id:"GJ02",phase:"groups",group:"J",home:"Argentina",away:"Austria",       date:"Lun 22 Jun",time:"12:00 PM",city:"Arlington"},
+  {id:"GJ13",phase:"groups",group:"J",home:"Jordania",away:"Algeria",        date:"Lun 22 Jun",time:"10:00 PM",city:"Santa Clara"},
+  {id:"GJ03",phase:"groups",group:"J",home:"Algeria",away:"Austria",         date:"Sáb 27 Jun",time:"9:00 PM",city:"Kansas City"},
+  {id:"GJ12",phase:"groups",group:"J",home:"Jordania",away:"Argentina",      date:"Sáb 27 Jun",time:"9:00 PM",city:"Arlington"},
+  // GRUPO K
+  {id:"GK01",phase:"groups",group:"K",home:"Portugal",away:"RD Congo",       date:"Mié 17 Jun",time:"12:00 PM",city:"Houston"},
+  {id:"GK23",phase:"groups",group:"K",home:"Uzbekistán",away:"Colombia",     date:"Mié 17 Jun",time:"9:00 PM",city:"Ciudad de México"},
+  {id:"GK02",phase:"groups",group:"K",home:"Portugal",away:"Uzbekistán",     date:"Mar 23 Jun",time:"12:00 PM",city:"Houston"},
+  {id:"GK13",phase:"groups",group:"K",home:"Colombia",away:"RD Congo",       date:"Mar 23 Jun",time:"9:00 PM",city:"Zapopan"},
+  {id:"GK03",phase:"groups",group:"K",home:"Colombia",away:"Portugal",       date:"Sáb 27 Jun",time:"6:30 PM",city:"Miami Gardens"},
+  {id:"GK12",phase:"groups",group:"K",home:"RD Congo",away:"Uzbekistán",     date:"Sáb 27 Jun",time:"6:30 PM",city:"Atlanta"},
+  // GRUPO L
+  {id:"GL01",phase:"groups",group:"L",home:"Inglaterra",away:"Croacia",      date:"Mié 17 Jun",time:"3:00 PM",city:"Arlington"},
+  {id:"GL23",phase:"groups",group:"L",home:"Ghana",away:"Panamá",            date:"Mié 17 Jun",time:"6:00 PM",city:"Toronto"},
+  {id:"GL02",phase:"groups",group:"L",home:"Inglaterra",away:"Ghana",        date:"Mar 23 Jun",time:"3:00 PM",city:"Foxborough"},
+  {id:"GL13",phase:"groups",group:"L",home:"Panamá",away:"Croacia",          date:"Mar 23 Jun",time:"6:00 PM",city:"Toronto"},
+  {id:"GL03",phase:"groups",group:"L",home:"Panamá",away:"Inglaterra",       date:"Sáb 27 Jun",time:"4:00 PM",city:"East Rutherford"},
+  {id:"GL12",phase:"groups",group:"L",home:"Croacia",away:"Ghana",           date:"Sáb 27 Jun",time:"4:00 PM",city:"Philadelphia"},
+];
 
 const KNOCKOUT_ROUNDS=[
   {id:"R32_1",phase:"round32",label:"Ronda 32 · 1"},{id:"R32_2",phase:"round32",label:"Ronda 32 · 2"},
@@ -544,7 +624,7 @@ export default function App(){
                 </div>
                 <h1 style={S.authTitle}>GRAN POLLA<br/><span style={{color:"#f9a825"}}>MUNDIALISTA 2026</span></h1>
                 <p style={S.authSub}>Canadá · México · Estados Unidos</p>
-                <p style={S.authDesc}>La gran POLLA MUNDIALISTA, diversión para la familia y los amigos — ¡inscríbete y participa!</p>
+                <p style={S.authDesc}>La gran <strong style={{color:"#f9a825"}}>POLLA MUNDIALISTA</strong>, diversión para la familia y los amigos — ¡inscríbete y participa!</p>
               </div>
               {authError&&<div style={S.errorBox}>{authError}</div>}
               <input className="scoreIn" style={S.input} placeholder="Correo electrónico" type="email" value={authForm.email}
@@ -709,6 +789,10 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
               <MatchRow key={m.id} match={m} pred={myPreds[m.id]} result={results[m.id]} savePrediction={savePrediction}/>
             ))}
           </div>
+
+          {/* TABLA DE POSICIONES */}
+          <GroupStandingsTable group={selGrp} teams={GROUPS[selGrp]} myPreds={myPreds}/>
+
           <div style={S.card}>
             <h3 style={S.cardTitle}>Clasificación Grupo {selGrp}</h3>
             {[0,1,2,3].map(pos=>{
@@ -759,6 +843,115 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
   );
 }
 
+// ============================================================
+// GROUP STANDINGS TABLE
+// ============================================================
+function GroupStandingsTable({group, teams, myPreds}){
+  // Calculate standings from user predictions
+  const standings = teams.map(team => ({
+    team, PJ:0, G:0, E:0, P:0, GF:0, GC:0, DG:0, PTS:0
+  }));
+
+  const getTeamIdx = (team) => standings.findIndex(s => s.team === team);
+
+  GROUP_MATCHES.filter(m => m.group === group).forEach(m => {
+    const pred = myPreds[m.id];
+    if(!pred || pred.home === "" || pred.away === "") return;
+    const h = parseInt(pred.home), a = parseInt(pred.away);
+    if(isNaN(h) || isNaN(a)) return;
+
+    const hi = getTeamIdx(m.home);
+    const ai = getTeamIdx(m.away);
+    if(hi === -1 || ai === -1) return;
+
+    // Home team
+    standings[hi].PJ++;
+    standings[hi].GF += h;
+    standings[hi].GC += a;
+    standings[hi].DG += (h - a);
+
+    // Away team
+    standings[ai].PJ++;
+    standings[ai].GF += a;
+    standings[ai].GC += h;
+    standings[ai].DG += (a - h);
+
+    if(h > a){
+      standings[hi].G++; standings[hi].PTS += 3;
+      standings[ai].P++;
+    } else if(a > h){
+      standings[ai].G++; standings[ai].PTS += 3;
+      standings[hi].P++;
+    } else {
+      standings[hi].E++; standings[hi].PTS++;
+      standings[ai].E++; standings[ai].PTS++;
+    }
+  });
+
+  // Sort: PTS → DG → GF
+  standings.sort((a,b) => b.PTS - a.PTS || b.DG - a.DG || b.GF - a.GF);
+
+  const hasAnyPred = standings.some(s => s.PJ > 0);
+
+  return(
+    <div style={S.card}>
+      <h3 style={S.cardTitle}>📊 Tabla de Posiciones — Tu Pronóstico</h3>
+      {!hasAnyPred && (
+        <p style={{color:"#546e7a",fontSize:13}}>Ingresa tus pronósticos arriba para ver la tabla automáticamente.</p>
+      )}
+      {hasAnyPred && (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{borderBottom:"2px solid #1a2f4a"}}>
+                {["#","Equipo","PJ","G","E","P","GF","GC","DG","PTS"].map(h=>(
+                  <th key={h} style={{
+                    padding:"6px 8px",textAlign: h==="Equipo"?"left":"center",
+                    color:"#546e7a",fontWeight:700,fontSize:11,letterSpacing:.5,
+                    textTransform:"uppercase",whiteSpace:"nowrap"
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((s,i)=>{
+                const isTop2 = i < 2;
+                const rowBg = i===0?"rgba(249,168,37,.08)":i===1?"rgba(30,136,229,.07)":"transparent";
+                return(
+                  <tr key={s.team} style={{borderBottom:"1px solid rgba(255,255,255,.04)",background:rowBg,transition:"background .2s"}}>
+                    <td style={{padding:"8px",textAlign:"center",fontWeight:800,color:i===0?"#f9a825":i===1?"#4fc3f7":"#546e7a",fontSize:16}}>
+                      {i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}`}
+                    </td>
+                    <td style={{padding:"8px",fontWeight:isTop2?700:400,color:isTop2?"#fff":"#b0bec5",whiteSpace:"nowrap"}}>
+                      {s.team}
+                      {isTop2 && <span style={{marginLeft:6,fontSize:10,color:"#81c784",fontWeight:700}}>CLASIFICA</span>}
+                    </td>
+                    <td style={{padding:"8px",textAlign:"center",color:"#90a4ae"}}>{s.PJ}</td>
+                    <td style={{padding:"8px",textAlign:"center",color:"#81c784",fontWeight:s.G>0?700:400}}>{s.G}</td>
+                    <td style={{padding:"8px",textAlign:"center",color:"#f9a825",fontWeight:s.E>0?700:400}}>{s.E}</td>
+                    <td style={{padding:"8px",textAlign:"center",color:"#ef5350",fontWeight:s.P>0?700:400}}>{s.P}</td>
+                    <td style={{padding:"8px",textAlign:"center",color:"#e0e0e0"}}>{s.GF}</td>
+                    <td style={{padding:"8px",textAlign:"center",color:"#e0e0e0"}}>{s.GC}</td>
+                    <td style={{padding:"8px",textAlign:"center",color:s.DG>0?"#81c784":s.DG<0?"#ef5350":"#90a4ae",fontWeight:700}}>
+                      {s.DG>0?`+${s.DG}`:s.DG}
+                    </td>
+                    <td style={{padding:"8px",textAlign:"center",fontWeight:900,fontSize:16,color:i===0?"#f9a825":i===1?"#4fc3f7":"#e0e0e0"}}>
+                      {s.PTS}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p style={{fontSize:11,color:"#37474f",marginTop:10,textAlign:"right"}}>
+            * Basado en tus pronósticos · Los 2 primeros clasifican
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MatchRow({match,pred,result,savePrediction}){
   const [h,setH]=useState(pred?.home??"");
   const [a,setA]=useState(pred?.away??"");
@@ -768,21 +961,33 @@ function MatchRow({match,pred,result,savePrediction}){
   const maxPts=scored?(POINTS[match.phase]?.exactScore||3):null;
   const label=match.label||(match.home&&match.away?`${match.home} vs ${match.away}`:"");
   function onBlur(){if(h!==""&&a!=="") savePrediction(match.id,h,a);}
+  const rowBg=scored?(pts===maxPts?"rgba(129,199,132,.08)":pts>0?"rgba(249,168,37,.07)":"rgba(239,83,80,.06)"):"transparent";
   return(
-    <div style={{...S.matchRow,background:scored?(pts===maxPts?"rgba(129,199,132,.08)":pts>0?"rgba(249,168,37,.07)":"rgba(239,83,80,.06)"):"transparent"}}>
-      <span style={{flex:1,fontSize:14,fontWeight:600,minWidth:140,color:"#cfd8dc"}}>{label}</span>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} onBlur={onBlur} placeholder="—"/>
-        <span style={{color:"#f9a825",fontWeight:900,fontSize:22,lineHeight:1}}>:</span>
-        <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} onBlur={onBlur} placeholder="—"/>
-      </div>
-      {scored&&(
-        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13}}>
-          <span style={{color:"#37474f"}}>Real:</span>
-          <span style={{fontWeight:800,color:"#eceff1"}}>{result.home}–{result.away}</span>
-          <span style={{background:pts===maxPts?"#1b5e20":pts>0?"#e65100":"#b71c1c",color:"#fff",padding:"2px 8px",borderRadius:4,fontWeight:800,fontSize:12}}>+{pts}pts</span>
+    <div style={{...S.matchRow,background:rowBg,flexDirection:"column",alignItems:"flex-start",gap:6}}>
+      {/* Date/time/city header */}
+      {(match.date||match.city) && (
+        <div style={{display:"flex",gap:12,fontSize:11,color:"#546e7a",letterSpacing:.5}}>
+          {match.date && <span>📅 {match.date}</span>}
+          {match.time && <span>🕐 {match.time} (COL)</span>}
+          {match.city && <span>📍 {match.city}</span>}
         </div>
       )}
+      {/* Match row */}
+      <div style={{display:"flex",alignItems:"center",gap:12,width:"100%",flexWrap:"wrap"}}>
+        <span style={{flex:1,fontSize:14,fontWeight:600,minWidth:140,color:"#cfd8dc"}}>{label}</span>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} onBlur={onBlur} placeholder="—"/>
+          <span style={{color:"#f9a825",fontWeight:900,fontSize:22,lineHeight:1}}>:</span>
+          <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} onBlur={onBlur} placeholder="—"/>
+        </div>
+        {scored&&(
+          <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13}}>
+            <span style={{color:"#37474f"}}>Real:</span>
+            <span style={{fontWeight:800,color:"#eceff1"}}>{result.home}–{result.away}</span>
+            <span style={{background:pts===maxPts?"#1b5e20":pts>0?"#e65100":"#b71c1c",color:"#fff",padding:"2px 8px",borderRadius:4,fontWeight:800,fontSize:12}}>+{pts}pts</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

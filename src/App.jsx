@@ -290,7 +290,9 @@ function buildPersonalBracket(preds){
     if(!pred||pred.home===""||pred.away==="") return `G(${id})`;
     const h=parseInt(pred.home), a=parseInt(pred.away);
     if(isNaN(h)||isNaN(a)) return `G(${id})`;
-    return h>=a ? m.home : m.away;
+    if(h>a) return m.home; if(a>h) return m.away;
+    if(pred.penHome&&pred.penAway){const ph=parseInt(pred.penHome),pa=parseInt(pred.penAway);if(ph>pa)return m.home;if(pa>ph)return m.away;}
+    return m.home;
   };
 
   // 5. CUARTOS
@@ -310,7 +312,9 @@ function buildPersonalBracket(preds){
     if(!pred||pred.home===""||pred.away==="") return `G(${id})`;
     const h=parseInt(pred.home), a=parseInt(pred.away);
     if(isNaN(h)||isNaN(a)) return `G(${id})`;
-    return h>=a ? m.home : m.away;
+    if(h>a) return m.home; if(a>h) return m.away;
+    if(pred.penHome&&pred.penAway){const ph=parseInt(pred.penHome),pa=parseInt(pred.penAway);if(ph>pa)return m.home;if(pa>ph)return m.away;}
+    return m.home;
   };
 
   // 6. SEMIS
@@ -323,7 +327,9 @@ function buildPersonalBracket(preds){
     if(!pred||pred.home===""||pred.away==="") return `G(${id})`;
     const h=parseInt(pred.home), a=parseInt(pred.away);
     if(isNaN(h)||isNaN(a)) return `G(${id})`;
-    return h>=a ? m.home : m.away;
+    if(h>a) return m.home; if(a>h) return m.away;
+    if(pred.penHome&&pred.penAway){const ph=parseInt(pred.penHome),pa=parseInt(pred.penAway);if(ph>pa)return m.home;if(pa>ph)return m.away;}
+    return m.home;
   };
   const loseSF = (id) => {
     const m=bracket[id]; if(!m) return "?";
@@ -331,7 +337,9 @@ function buildPersonalBracket(preds){
     if(!pred||pred.home===""||pred.away==="") return `P(${id})`;
     const h=parseInt(pred.home), a=parseInt(pred.away);
     if(isNaN(h)||isNaN(a)) return `P(${id})`;
-    return h>=a ? m.away : m.home;
+    if(h>a) return m.away; if(a>h) return m.home;
+    if(pred.penHome&&pred.penAway){const ph=parseInt(pred.penHome),pa=parseInt(pred.penAway);if(ph>pa)return m.away;if(pa>ph)return m.home;}
+    return m.away;
   };
 
   // 7. TERCER LUGAR & FINAL
@@ -528,6 +536,7 @@ export default function App(){
   const [myGrpP,setMyGrpP]=useState({});
   const [myChamp,setMyChamp]=useState({});
   const [allScores,setAllScores]=useState([]);   // [{uid,name,score}]
+  const [submitted,setSubmitted]=useState(false); // pronósticos bloqueados
 
   const [page,setPage]=useState("login");
   const [liveStatus,setLiveStatus]=useState(null);
@@ -569,6 +578,7 @@ export default function App(){
         setMyPreds(d.matches||{});
         setMyGrpP(d.groups||{});
         setMyChamp(d.champ||{});
+        setSubmitted(d.submitted||false);
       }
     });
     return unsub;
@@ -696,6 +706,7 @@ export default function App(){
 
   // ── Save predictions ──────────────────────────────────────
   async function savePrediction(id,h,a,penHome="",penAway=""){
+    if(submitted) return; // bloqueado
     const entry={home:h,away:a};
     if(penHome!==""&&penAway!==""){entry.penHome=penHome;entry.penAway=penAway;}
     const updated={...myPreds,[id]:entry};
@@ -703,14 +714,23 @@ export default function App(){
     await setDoc(doc(db,"predictions",fbUser.uid),{matches:updated},{merge:true});
   }
   async function saveGroupRank(grp,ranks){
+    if(submitted) return;
     const updated={...myGrpP,[grp]:ranks};
     setMyGrpP(updated);
     await setDoc(doc(db,"predictions",fbUser.uid),{groups:updated},{merge:true});
   }
   async function saveChampPrediction(field,value){
+    if(submitted) return;
     const updated={...myChamp,[field]:value};
     setMyChamp(updated);
     await setDoc(doc(db,"predictions",fbUser.uid),{champ:updated},{merge:true});
+  }
+
+  // ── Submit predictions (lock forever) ────────────────────
+  async function submitPredictions(){
+    await setDoc(doc(db,"predictions",fbUser.uid),{submitted:true,submittedAt:serverTimestamp()},{merge:true});
+    setSubmitted(true);
+    addNote("✅ ¡Pronósticos enviados y bloqueados!","result");
   }
 
   // ── Admin: save result ────────────────────────────────────
@@ -901,7 +921,8 @@ export default function App(){
         {/* PREDICT */}
         {page==="predict"&&fbUser&&(
           <PredictPage results={results} myPreds={myPreds} myGrpP={myGrpP} myChamp={myChamp}
-            savePrediction={savePrediction} saveGroupRank={saveGroupRank} saveChampPrediction={saveChampPrediction}/>
+            savePrediction={savePrediction} saveGroupRank={saveGroupRank} saveChampPrediction={saveChampPrediction}
+            submitted={submitted} submitPredictions={submitPredictions}/>
         )}
 
         {/* LIVE */}
@@ -950,12 +971,85 @@ export default function App(){
 // ============================================================
 // PREDICT PAGE
 // ============================================================
-function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRank,saveChampPrediction}){
+function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRank,saveChampPrediction,submitted,submitPredictions}){
   const [tab,setTab]=useState("groups");
   const [selGrp,setSelGrp]=useState("A");
+  const [showConfirm,setShowConfirm]=useState(false);
+  const [submitting,setSubmitting]=useState(false);
+
+  async function handleSubmit(){
+    setSubmitting(true);
+    await submitPredictions();
+    setShowConfirm(false);
+    setSubmitting(false);
+  }
+
+  // Count filled predictions
+  const groupFilled = GROUP_MATCHES.filter(m=>myPreds[m.id]?.home!==undefined&&myPreds[m.id]?.home!=="").length;
+  const totalGroup = GROUP_MATCHES.length;
+
   return(
     <div style={S.section}>
       <h2 style={S.sectionTitle}>🎯 Mis Pronósticos</h2>
+
+      {/* Submit banner */}
+      {!submitted ? (
+        <div style={{background:"rgba(249,168,37,.1)",border:"1px solid rgba(249,168,37,.4)",borderRadius:12,padding:"16px 20px",marginBottom:20}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+            <span style={{fontSize:28,flexShrink:0}}>📋</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:15,color:"#f9a825",marginBottom:4}}>
+                ¡Recuerda enviar tus pronósticos!
+              </div>
+              <div style={{fontSize:13,color:"#b0bec5",lineHeight:1.6,marginBottom:10}}>
+                Ingresa todos tus pronósticos de grupos, eliminatorias y campeón.
+                Cuando estés listo, presiona <strong style={{color:"#f9a825"}}>ENVIAR PRONÓSTICOS</strong> para bloquearlos.
+                <strong style={{color:"#ef5350"}}> Una vez enviados no podrás modificarlos.</strong>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+                <div style={{fontSize:13,color:"#90a4ae"}}>
+                  Grupos completados: <strong style={{color:groupFilled===totalGroup?"#81c784":"#f9a825"}}>{groupFilled}/{totalGroup}</strong>
+                </div>
+                <button style={{background:"linear-gradient(135deg,#f9a825,#ffa726)",color:"#000",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",letterSpacing:.5}}
+                  onClick={()=>setShowConfirm(true)}>
+                  🔒 ENVIAR PRONÓSTICOS
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ):(
+        <div style={{background:"rgba(129,199,132,.1)",border:"2px solid #81c784",borderRadius:12,padding:"16px 20px",marginBottom:20,display:"flex",gap:12,alignItems:"center"}}>
+          <span style={{fontSize:28}}>✅</span>
+          <div>
+            <div style={{fontWeight:800,fontSize:15,color:"#81c784"}}>¡Pronósticos enviados y bloqueados!</div>
+            <div style={{fontSize:13,color:"#90a4ae",marginTop:2}}>Tus pronósticos están registrados. Ya no es posible modificarlos. ¡Buena suerte! ⚽</div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modal */}
+      {showConfirm&&(
+        <div style={{position:"fixed",top:0,left:0,width:"100%",height:"100%",background:"rgba(0,0,0,.8)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"#131d2e",border:"2px solid #f9a825",borderRadius:16,padding:32,maxWidth:400,width:"100%",textAlign:"center"}}>
+            <div style={{fontSize:48,marginBottom:12}}>🔒</div>
+            <h3 style={{fontSize:20,fontWeight:800,color:"#f9a825",marginBottom:12}}>¿Enviar pronósticos?</h3>
+            <p style={{color:"#b0bec5",fontSize:14,lineHeight:1.6,marginBottom:24}}>
+              Esta acción es <strong style={{color:"#ef5350"}}>irreversible</strong>. Una vez enviados, tus pronósticos quedarán bloqueados y no podrás modificarlos durante todo el Mundial.
+            </p>
+            <div style={{display:"flex",gap:12,justifyContent:"center"}}>
+              <button style={{background:"transparent",border:"1px solid #546e7a",color:"#90a4ae",borderRadius:8,padding:"10px 20px",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14}}
+                onClick={()=>setShowConfirm(false)} disabled={submitting}>
+                Cancelar
+              </button>
+              <button style={{background:"linear-gradient(135deg,#f9a825,#ffa726)",color:"#000",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,cursor:"pointer",fontFamily:"inherit",fontSize:14,...(submitting?{opacity:.6}:{})}}
+                onClick={handleSubmit} disabled={submitting}>
+                {submitting?"Enviando...":"✅ Sí, enviar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={S.tabRow}>
         {[{key:"groups",label:"📊 Grupos"},{key:"knockouts",label:"⚡ Eliminatorias"},{key:"champion",label:"🏆 Campeón"}].map(t=>(
           <button key={t.key} onClick={()=>setTab(t.key)} style={{...S.tab,...(tab===t.key?S.tabActive:{})}}>{t.label}</button>
@@ -969,9 +1063,9 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
             ))}
           </div>
           <div style={S.card}>
-            <h3 style={S.cardTitle}>Grupo {selGrp}</h3>
+            <h3 style={S.cardTitle}>Grupo {selGrp} {submitted&&<span style={{fontSize:11,color:"#ef5350",marginLeft:8}}>🔒 Bloqueado</span>}</h3>
             {GROUP_MATCHES.filter(m=>m.group===selGrp).map(m=>(
-              <MatchRow key={m.id} match={m} pred={myPreds[m.id]} result={results[m.id]} savePrediction={savePrediction}/>
+              <MatchRow key={m.id} match={m} pred={myPreds[m.id]} result={results[m.id]} savePrediction={savePrediction} locked={submitted}/>
             ))}
           </div>
 
@@ -1009,7 +1103,7 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
                     : {id, phase:ph.key, label:id};
                   return(
                     <MatchRow key={id} match={matchObj} pred={myPreds[id]}
-                      result={results[id]} savePrediction={savePrediction}/>
+                      result={results[id]} savePrediction={savePrediction} locked={submitted}/>
                   );
                 })}
               </div>
@@ -1019,11 +1113,13 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
       )}
       {tab==="champion"&&(
         <div style={S.card}>
-          <h3 style={S.cardTitle}>🏆 Predicción del Campeón</h3>
+          <h3 style={S.cardTitle}>🏆 Predicción del Campeón {submitted&&<span style={{fontSize:11,color:"#ef5350",marginLeft:8}}>🔒 Bloqueado</span>}</h3>
           {[{key:"champion",label:"🥇 Campeón",pts:"15 pts"},{key:"runnerUp",label:"🥈 Subcampeón",pts:"10 pts"},{key:"third",label:"🥉 Tercer Lugar",pts:"7 pts"},{key:"fourth",label:"4° Lugar",pts:"5 pts"}].map(f=>(
             <div key={f.key} style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
               <span style={{minWidth:160,fontWeight:700,fontSize:15}}>{f.label}</span>
-              <select style={S.select} value={myChamp[f.key]||""} onChange={e=>saveChampPrediction(f.key,e.target.value)}>
+              <select style={{...S.select,...(submitted?{opacity:.6,cursor:"not-allowed"}:{})}}
+                value={myChamp[f.key]||""} disabled={submitted}
+                onChange={e=>saveChampPrediction(f.key,e.target.value)}>
                 <option value="">— Seleccionar —</option>
                 {Object.values(GROUPS).flat().map(t=><option key={t} value={t}>{t}</option>)}
               </select>
@@ -1145,7 +1241,7 @@ function GroupStandingsTable({group, teams, myPreds}){
   );
 }
 
-function MatchRow({match,pred,result,savePrediction}){
+function MatchRow({match,pred,result,savePrediction,locked}){
   const isKnockout = ["round32","round16","quarters","semis","third","final"].includes(match.phase);
   const [h,setH]=useState(pred?.home??"");
   const [a,setA]=useState(pred?.away??"");
@@ -1163,6 +1259,7 @@ function MatchRow({match,pred,result,savePrediction}){
   const label = match.label||(match.home&&match.away?`${match.home} vs ${match.away}`:"");
 
   function onBlur(){
+    if(locked) return;
     if(h===""||a==="") return;
     const penH = (isKnockout&&isDraw) ? ph : "";
     const penA = (isKnockout&&isDraw) ? pa : "";
@@ -1189,11 +1286,14 @@ function MatchRow({match,pred,result,savePrediction}){
       <div style={{display:"flex",alignItems:"center",gap:12,width:"100%",flexWrap:"wrap"}}>
         <span style={{flex:1,fontSize:14,fontWeight:600,minWidth:140,color:"#cfd8dc"}}>{label}</span>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h}
+          <input className="scoreIn" style={{...S.scoreIn,...(locked?{opacity:.6,cursor:"not-allowed",borderColor:"#37474f"}:{})}}
+            type="number" min="0" max="20" value={h} disabled={locked}
             onChange={e=>setH(e.target.value)} onBlur={onBlur} placeholder="—"/>
           <span style={{color:"#f9a825",fontWeight:900,fontSize:22,lineHeight:1}}>:</span>
-          <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a}
+          <input className="scoreIn" style={{...S.scoreIn,...(locked?{opacity:.6,cursor:"not-allowed",borderColor:"#37474f"}:{})}}
+            type="number" min="0" max="20" value={a} disabled={locked}
             onChange={e=>setA(e.target.value)} onBlur={onBlur} placeholder="—"/>
+          {locked&&<span style={{fontSize:12,color:"#546e7a"}}>🔒</span>}
         </div>
         {scored&&(
           <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13}}>
@@ -1205,7 +1305,14 @@ function MatchRow({match,pred,result,savePrediction}){
         )}
       </div>
       {/* Penalty field — only for knockout + draw */}
-      {isKnockout && isDraw && (
+      {isKnockout && isDraw && locked && pred?.penHome && (
+        <div style={{display:"flex",alignItems:"center",gap:10,paddingLeft:8,paddingTop:4,borderTop:"1px dashed rgba(79,195,247,.2)",width:"100%"}}>
+          <span style={{fontSize:12,color:"#4fc3f7",fontWeight:700}}>🥅 Penales:</span>
+          <span style={{fontWeight:800,color:"#4fc3f7"}}>{pred.penHome} – {pred.penAway}</span>
+          <span style={{fontSize:11,color:"#81c784",fontWeight:700}}>🔒</span>
+        </div>
+      )}
+      {isKnockout && isDraw && !locked && (
         <div style={{display:"flex",alignItems:"center",gap:10,paddingLeft:8,paddingTop:4,borderTop:"1px dashed rgba(79,195,247,.3)",width:"100%",flexWrap:"wrap"}}>
           <span style={{fontSize:12,color:"#4fc3f7",fontWeight:700,letterSpacing:.5}}>🥅 PENALES:</span>
           <div style={{display:"flex",alignItems:"center",gap:6}}>

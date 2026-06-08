@@ -1325,7 +1325,7 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
                 <div style={{fontSize:16,fontWeight:700,color:"#fff"}}>📅 Sábado 27 de Junio, 2026</div>
               </div>
             </div>
-          ):(
+          ) : (
             <>
               <div style={{background:"rgba(30,136,229,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
                 <span style={{fontSize:20,flexShrink:0}}>🧠</span>
@@ -2104,4 +2104,3 @@ const S={
   groupSummaryCard:{background:"rgba(255,255,255,.02)",border:"1px solid #1a2f4a",borderRadius:10,padding:12},
   championCard:{background:"linear-gradient(135deg,#1a2f00,#2e5800)",border:"2px solid #f9a825",borderRadius:16,padding:"40px 24px",textAlign:"center",marginTop:20,animation:"glow 2s infinite"},
 };
-// Mon Jun  8 08:40:06 -05 2026

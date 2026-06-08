@@ -552,6 +552,7 @@ export default function App(){
     {key:"live",label:"📡 En Vivo"},
     {key:"bracket",label:"🏟️ Bracket"},
     {key:"ranking",label:"🏆 Ranking"},
+    {key:"sponsors",label:"🤝 Patrocinadores"},
     ...(isAdmin?[{key:"admin",label:"⚙️ Admin"}]:[]),
   ]:[];
 
@@ -753,6 +754,9 @@ export default function App(){
           </div>
         )}
 
+        {/* SPONSORS */}
+        {page==="sponsors"&&<SponsorsPage/>}
+
         {/* ADMIN */}
         {page==="admin"&&isAdmin&&(
           <AdminPage results={results} saveResult={saveResult}/>
@@ -793,22 +797,6 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
           {/* TABLA DE POSICIONES */}
           <GroupStandingsTable group={selGrp} teams={GROUPS[selGrp]} myPreds={myPreds}/>
 
-          <div style={S.card}>
-            <h3 style={S.cardTitle}>Clasificación Grupo {selGrp}</h3>
-            {[0,1,2,3].map(pos=>{
-              const grpRank=myGrpP[selGrp]||["","","",""];
-              return(
-                <div key={pos} style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
-                  <span style={{fontSize:22,minWidth:36,textAlign:"center"}}>{["🥇","🥈","🥉","4°"][pos]}</span>
-                  <select style={S.select} value={grpRank[pos]||""}
-                    onChange={e=>{const u=[...(myGrpP[selGrp]||["","","",""])];u[pos]=e.target.value;saveGroupRank(selGrp,u);}}>
-                    <option value="">— Seleccionar equipo —</option>
-                    {GROUPS[selGrp].map(t=><option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-              );
-            })}
-          </div>
         </>
       )}
       {tab==="knockouts"&&(
@@ -1119,6 +1107,157 @@ function AdminPage({results,saveResult}){
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// SPONSORS PAGE
+// ============================================================
+function SponsorsPage(){
+  const benefits=[
+    {icon:"📍",title:"Logo en la plataforma",desc:"Tu logo visible en todas las páginas de la Gran Polla Mundialista durante todo el torneo (11 Jun – 19 Jul 2026)."},
+    {icon:"👥",title:"Audiencia activa",desc:"Participantes conectados diariamente siguiendo resultados, rankings y pronósticos — alta frecuencia de visitas."},
+    {icon:"⏱️",title:"39 días de exposición",desc:"Todo el Mundial. Tu marca presente desde el partido inaugural hasta la Gran Final."},
+    {icon:"📱",title:"100% digital",desc:"Plataforma accesible desde celular, tablet y computador. Tu logo llega a todos los dispositivos."},
+    {icon:"🎁",title:"Premio en bono digital",desc:"Tu aporte es 100% en bonos digitales — sin efectivo. Canjeable por productos o servicios de tu negocio."},
+    {icon:"🏆",title:"Asociación con el campeón",desc:"Tu marca aparece destacada en la pantalla del ganador y en el ranking final del torneo."},
+  ];
+
+  const spots=[
+    {pos:"🥇 PATROCINADOR PRINCIPAL",color:"#f9a825",desc:"Logo grande en el header y dashboard · Mención en todas las notificaciones · Logo en pantalla del campeón",bono:"Bono digital desde $200.000 COP"},
+    {pos:"🥈 PATROCINADOR OFICIAL",color:"#bdbdbd",desc:"Logo mediano en el ranking y bracket · Mención en la página de inicio",bono:"Bono digital desde $100.000 COP"},
+    {pos:"🥉 PATROCINADOR COLABORADOR",color:"#a1887f",desc:"Logo en la página de patrocinadores · Enlace a tu negocio o redes sociales",bono:"Bono digital desde $50.000 COP"},
+  ];
+
+  const currentSponsors=[
+    // Agregar patrocinadores aquí cuando se confirmen
+  ];
+
+  return(
+    <div style={S.section}>
+      <h2 style={S.sectionTitle}>🤝 Patrocinadores</h2>
+
+      {/* Hero de campaña */}
+      <div style={{...S.heroCard,background:"linear-gradient(135deg,#1a1200 0%,#2d2000 50%,#1a1200 100%)",border:"1px solid rgba(249,168,37,.3)",marginBottom:20}}>
+        <div style={{position:"relative",zIndex:1}}>
+          <div style={{fontSize:12,letterSpacing:3,color:"#f9a825",textTransform:"uppercase",marginBottom:8}}>Campaña de patrocinio</div>
+          <h3 style={{fontSize:28,fontWeight:700,color:"#fff",letterSpacing:1,marginBottom:12,lineHeight:1.2}}>
+            ¡Sé parte de la<br/><span style={{color:"#f9a825"}}>Gran Polla Mundialista 2026!</span>
+          </h3>
+          <p style={{color:"#b0bec5",fontSize:14,lineHeight:1.7,maxWidth:600}}>
+            La Gran Polla Mundialista lleva más de 15 años uniendo familias y amigos en torno al fútbol.
+            Esta edición 2026 es la más grande de la historia — 48 equipos, 104 partidos, 39 días de emoción.
+            <strong style={{color:"#fff"}}> Tu marca puede ser parte de esta celebración.</strong>
+          </p>
+          <div style={{marginTop:16,padding:"12px 16px",background:"rgba(249,168,37,.1)",borderRadius:8,border:"1px solid rgba(249,168,37,.3)",display:"inline-block"}}>
+            <div style={{fontSize:12,color:"#f9a825",letterSpacing:1,marginBottom:4}}>CONTACTO EXCLUSIVO</div>
+            <div style={{fontSize:18,fontWeight:700,color:"#fff"}}>📧 mundialistagranpolla@gmail.com</div>
+            <div style={{fontSize:12,color:"#90a4ae",marginTop:4}}>Toda la negociación se realiza únicamente por este correo</div>
+          </div>
+        </div>
+        <div style={{fontSize:100,opacity:.06,position:"absolute",right:-10,bottom:-10,lineHeight:1}}>🤝</div>
+      </div>
+
+      {/* Beneficios */}
+      <div style={S.card}>
+        <h3 style={S.cardTitle}>✨ ¿Por qué patrocinar?</h3>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+          {benefits.map(b=>(
+            <div key={b.title} style={{background:"rgba(255,255,255,.03)",border:"1px solid #1a2f4a",borderRadius:10,padding:"14px 16px",display:"flex",gap:12,alignItems:"flex-start"}}>
+              <span style={{fontSize:28,flexShrink:0}}>{b.icon}</span>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,color:"#e0e0e0",marginBottom:4}}>{b.title}</div>
+                <div style={{fontSize:12,color:"#78909c",lineHeight:1.6}}>{b.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Paquetes */}
+      <div style={S.card}>
+        <h3 style={S.cardTitle}>📦 Paquetes disponibles</h3>
+        <p style={{color:"#546e7a",fontSize:13,marginBottom:16}}>
+          Solo quedan <strong style={{color:"#f9a825"}}>3 cupos</strong> disponibles — uno por categoría.
+          Los premios son <strong style={{color:"#81c784"}}>100% bonos digitales</strong>, sin efectivo.
+        </p>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {spots.map(s=>(
+            <div key={s.pos} style={{background:"rgba(255,255,255,.03)",border:`1px solid ${s.color}40`,borderLeft:`4px solid ${s.color}`,borderRadius:10,padding:"16px 20px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8,marginBottom:8}}>
+                <span style={{fontSize:16,fontWeight:800,color:s.color}}>{s.pos}</span>
+                <span style={{background:`${s.color}20`,border:`1px solid ${s.color}60`,borderRadius:6,padding:"4px 12px",fontSize:12,fontWeight:700,color:s.color}}>{s.bono}</span>
+              </div>
+              <p style={{fontSize:13,color:"#90a4ae",lineHeight:1.6}}>{s.desc}</p>
+              <a href="mailto:mundialistagranpolla@gmail.com?subject=Patrocinio Gran Polla Mundialista 2026"
+                style={{display:"inline-block",marginTop:12,background:"linear-gradient(135deg,#1565c0,#1e88e5)",color:"#fff",border:"none",borderRadius:6,padding:"8px 18px",fontWeight:700,fontSize:13,textDecoration:"none",fontFamily:"inherit",cursor:"pointer",letterSpacing:.5}}>
+                ✉️ Quiero este paquete
+              </a>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Condiciones */}
+      <div style={S.card}>
+        <h3 style={S.cardTitle}>📋 Condiciones del patrocinio</h3>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {[
+            ["🎁","Todos los aportes son en bonos digitales — cero efectivo","#81c784"],
+            ["📅","Vigencia: desde el 11 de junio hasta el 19 de julio de 2026 (todo el Mundial)","#4fc3f7"],
+            ["🖼️","El patrocinador debe suministrar su logo en formato PNG o SVG fondo transparente","#f9a825"],
+            ["📧","Toda la negociación se realiza únicamente por mundialistagranpolla@gmail.com","#f9a825"],
+            ["🏆","El bono digital del premio se entrega al ganador al finalizar el torneo","#81c784"],
+            ["❌","No se aceptan aportes en efectivo bajo ninguna modalidad","#ef5350"],
+            ["✅","Se aceptan restaurantes, tiendas, almacenes, servicios digitales y cualquier negocio formal","#81c784"],
+          ].map(([icon,text,color])=>(
+            <div key={text} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"8px 10px",background:"rgba(255,255,255,.02)",borderRadius:8}}>
+              <span style={{fontSize:18,flexShrink:0}}>{icon}</span>
+              <span style={{fontSize:13,color:"#90a4ae",lineHeight:1.6}}>{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Patrocinadores actuales */}
+      <div style={S.card}>
+        <h3 style={S.cardTitle}>🌟 Nuestros Patrocinadores</h3>
+        {currentSponsors.length===0?(
+          <div style={{textAlign:"center",padding:"40px 20px"}}>
+            <div style={{fontSize:48,marginBottom:12,opacity:.3}}>🤝</div>
+            <p style={{color:"#37474f",fontSize:14}}>Aún no hay patrocinadores confirmados.</p>
+            <p style={{color:"#37474f",fontSize:13,marginTop:4}}>¡Sé el primero en unirte!</p>
+            <a href="mailto:mundialistagranpolla@gmail.com?subject=Patrocinio Gran Polla Mundialista 2026"
+              style={{display:"inline-block",marginTop:16,background:"linear-gradient(135deg,#f9a825,#ffa726)",color:"#000",border:"none",borderRadius:8,padding:"12px 24px",fontWeight:800,fontSize:14,textDecoration:"none",letterSpacing:1}}>
+              📧 CONTACTAR AHORA
+            </a>
+          </div>
+        ):(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12}}>
+            {currentSponsors.map(sp=>(
+              <div key={sp.name} style={{background:"rgba(255,255,255,.04)",border:"1px solid #1a2f4a",borderRadius:10,padding:"16px",textAlign:"center"}}>
+                <div style={{fontSize:32,marginBottom:8}}>{sp.icon||"🏢"}</div>
+                <div style={{fontWeight:700,fontSize:14,color:"#e0e0e0"}}>{sp.name}</div>
+                <div style={{fontSize:11,color:"#546e7a",marginTop:4}}>{sp.category}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* CTA final */}
+      <div style={{textAlign:"center",padding:"32px 20px",background:"linear-gradient(135deg,#0d2137,#1a3a5c)",borderRadius:16,border:"1px solid rgba(30,136,229,.3)"}}>
+        <div style={{fontSize:36,marginBottom:12}}>⚽🏆🎁</div>
+        <h3 style={{fontSize:22,fontWeight:700,color:"#fff",marginBottom:8}}>¿Listo para patrocinar?</h3>
+        <p style={{color:"#90a4ae",fontSize:14,marginBottom:20,maxWidth:400,margin:"0 auto 20px"}}>
+          Escríbenos al correo y en menos de 24 horas te respondemos con todos los detalles.
+        </p>
+        <a href="mailto:mundialistagranpolla@gmail.com?subject=Patrocinio Gran Polla Mundialista 2026&body=Hola, me interesa patrocinar la Gran Polla Mundialista 2026. Por favor envíenme más información."
+          style={{display:"inline-block",background:"linear-gradient(135deg,#f9a825,#ffa726)",color:"#000",border:"none",borderRadius:10,padding:"14px 32px",fontWeight:800,fontSize:16,textDecoration:"none",letterSpacing:1}}>
+          📧 mundialistagranpolla@gmail.com
+        </a>
       </div>
     </div>
   );

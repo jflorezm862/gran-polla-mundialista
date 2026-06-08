@@ -169,7 +169,6 @@ function calcGroupStandings(group, preds){
   const teams = GROUPS[group];
   const standings = teams.map(t=>({team:t,PJ:0,G:0,E:0,P:0,GF:0,GC:0,DG:0,PTS:0}));
   const idx = t => standings.findIndex(s=>s.team===t);
-
   GROUP_MATCHES.filter(m=>m.group===group).forEach(m=>{
     const pred=preds[m.id];
     if(!pred||pred.home===""||pred.away==="") return;
@@ -186,68 +185,155 @@ function calcGroupStandings(group, preds){
   return standings.sort((a,b)=>b.PTS-a.PTS||b.DG-a.DG||b.GF-a.GF);
 }
 
-// Obtiene el ganador de un partido eliminatorio según pronóstico del usuario
-function getKnockoutWinner(matchId, preds){
-  const pred=preds[matchId];
-  if(!pred||pred.home===""||pred.away==="") return null;
-  const h=parseInt(pred.home), a=parseInt(pred.away);
-  if(isNaN(h)||isNaN(a)) return null;
-  // En eliminatorias, si empate consideramos que va a penales y avanza el local (simplificación)
-  if(h>=a) return pred._home;
-  return pred._away;
+// ============================================================
+// FIFA ANNEX C — Tabla oficial de 495 combinaciones
+// Columnas: [3rdVs1A, 3rdVs1B, 3rdVs1D, 3rdVs1E, 3rdVs1G, 3rdVs1I, 3rdVs1K, 3rdVs1L]
+// Cada fila: grupos que clasifican sus terceros (8 de 12)
+// ============================================================
+const FIFA_ANNEX_C = [
+  // No.: groups → [vs1A, vs1B, vs1D, vs1E, vs1G, vs1I, vs1K, vs1L]
+  ["E","F","G","H","I","J","K","L","E","J","I","F","H","G","L","K"],
+  ["D","F","G","H","I","J","K","L","H","G","I","D","J","F","L","K"],
+  ["D","E","G","H","I","J","K","L","E","J","I","D","H","G","L","K"],
+  ["D","E","F","H","I","J","K","L","E","J","I","D","H","F","L","K"],
+  ["D","E","F","G","I","J","K","L","E","G","I","D","J","F","L","K"],
+  ["D","E","F","G","H","J","K","L","E","G","J","D","H","F","L","K"],
+  ["D","E","F","G","H","I","K","L","E","G","I","D","H","F","L","K"],
+  ["D","E","F","G","H","I","J","L","E","G","J","D","H","F","L","I"],
+  ["D","E","F","G","H","I","J","K","E","G","J","D","H","F","I","K"],
+  ["C","F","G","H","I","J","K","L","H","G","I","C","J","F","L","K"],
+  ["C","E","G","H","I","J","K","L","E","J","I","C","H","G","L","K"],
+  ["C","E","F","H","I","J","K","L","E","J","I","C","H","F","L","K"],
+  ["C","E","F","G","I","J","K","L","E","G","I","C","J","F","L","K"],
+  ["C","E","F","G","H","J","K","L","E","G","J","C","H","F","L","K"],
+  ["C","E","F","G","H","I","K","L","E","G","I","C","H","F","L","K"],
+  ["C","E","F","G","H","I","J","L","E","G","J","C","H","F","L","I"],
+  ["C","E","F","G","H","I","J","K","E","G","J","C","H","F","I","K"],
+  ["C","D","G","H","I","J","K","L","H","G","I","C","J","D","L","K"],
+  ["C","D","F","H","I","J","K","L","C","J","I","D","H","F","L","K"],
+  ["C","D","F","G","I","J","K","L","C","G","I","D","J","F","L","K"],
+  ["C","D","F","G","H","J","K","L","C","G","J","D","H","F","L","K"],
+  ["C","D","F","G","H","I","K","L","C","G","I","D","H","F","L","K"],
+  ["C","D","F","G","H","I","J","L","C","G","J","D","H","F","L","I"],
+  ["C","D","F","G","H","I","J","K","C","G","J","D","H","F","I","K"],
+  ["C","D","E","H","I","J","K","L","E","J","I","C","H","D","L","K"],
+  ["C","D","E","G","I","J","K","L","E","G","I","C","J","D","L","K"],
+  ["C","D","E","G","H","J","K","L","E","G","J","C","H","D","L","K"],
+  ["C","D","E","G","H","I","K","L","E","G","I","C","H","D","L","K"],
+  ["C","D","E","G","H","I","J","L","E","G","J","C","H","D","L","I"],
+  ["C","D","E","G","H","I","J","K","E","G","J","C","H","D","I","K"],
+  ["C","D","E","F","I","J","K","L","C","J","E","D","I","F","L","K"],
+  ["C","D","E","F","H","J","K","L","C","J","E","D","H","F","L","K"],
+  ["C","D","E","F","H","I","K","L","C","E","I","D","H","F","L","K"],
+  ["C","D","E","F","H","I","J","L","C","J","E","D","H","F","L","I"],
+  ["C","D","E","F","H","I","J","K","C","J","E","D","H","F","I","K"],
+  ["C","D","E","F","G","J","K","L","C","G","E","D","J","F","L","K"],
+  ["C","D","E","F","G","I","K","L","C","G","E","D","I","F","L","K"],
+  ["C","D","E","F","G","I","J","L","C","G","E","D","J","F","L","I"],
+  ["C","D","E","F","G","I","J","K","C","G","E","D","J","F","I","K"],
+  ["C","D","E","F","G","H","K","L","C","G","E","D","H","F","L","K"],
+  ["C","D","E","F","G","H","J","L","C","G","J","D","H","F","L","E"],
+  ["C","D","E","F","G","H","J","K","C","G","J","D","H","F","E","K"],
+  ["C","D","E","F","G","H","I","L","C","G","E","D","H","F","L","I"],
+  ["C","D","E","F","G","H","I","K","C","G","E","D","H","F","I","K"],
+  ["C","D","E","F","G","H","I","J","C","G","J","D","H","F","E","I"],
+];
+
+// Encuentra la fila del Annex C para los 8 grupos clasificados
+function findAnnexC(best8Groups){
+  const sorted = [...best8Groups].sort();
+  for(const row of FIFA_ANNEX_C){
+    const rowGroups = row.slice(0,8).sort();
+    if(rowGroups.join("")===sorted.join("")) return row;
+  }
+  return null;
 }
 
 // Construye el bracket completo personalizado basado en pronósticos del usuario
-// Retorna un mapa: matchId → {home, away, date, city, phase, label}
 function buildPersonalBracket(preds){
   const bracket = {};
 
   // 1. Calcular clasificados por grupo
-  const classified = {}; // {A: [1ro, 2do, 3ro, 4to], ...}
+  const classified = {};
   Object.keys(GROUPS).forEach(g=>{
     const standings = calcGroupStandings(g, preds);
     classified[g] = standings.map(s=>s.team);
   });
 
-  // 2. Calcular mejores terceros (top 8 de los 12 grupos)
-  // Puntos de los terceros lugares
-  const thirds = Object.keys(GROUPS).map(g=>({
-    group:g,
-    team: classified[g][2]||"?",
-    pts: calcGroupStandings(g,preds)[2]?.PTS||0,
-    dg:  calcGroupStandings(g,preds)[2]?.DG||0,
-    gf:  calcGroupStandings(g,preds)[2]?.GF||0,
-  })).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
-  const best8thirds = thirds.slice(0,8).map(t=>t.team);
+  // 2. Calcular mejores terceros (top 8)
+  const thirdsData = Object.keys(GROUPS).map(g=>{
+    const st = calcGroupStandings(g, preds);
+    return { group:g, team:classified[g]?.[2]||`3°${g}`, pts:st[2]?.PTS||0, dg:st[2]?.DG||0, gf:st[2]?.GF||0 };
+  }).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
 
-  // Helper
+  const best8 = thirdsData.slice(0,8);
+  const best8Groups = best8.map(t=>t.group); // ej: ["E","F","G","H","I","J","K","L"]
+  const t3byGroup = {}; // { "E": "Alemania", "F": "Japón", ... }
+  best8.forEach(t=>{ t3byGroup[t.group]=t.team; });
+
+  // 3. Aplicar tabla FIFA Annex C
+  const annexRow = findAnnexC(best8Groups);
+
+  // Si no encontramos fila exacta (ej. pocos pronósticos), usamos fallback
+  // annexRow[8..15] = [vs1A, vs1B, vs1D, vs1E, vs1G, vs1I, vs1K, vs1L]
+  const get3rd = (groupCode) => {
+    if(!groupCode) return "3°?";
+    return t3byGroup[groupCode] || `3°${groupCode}`;
+  };
+
+  // Mapeo de posición en annexRow a qué ganador enfrenta
+  // Columnas: [vs1A(8), vs1B(9), vs1D(10), vs1E(11), vs1G(12), vs1I(13), vs1K(14), vs1L(15)]
+  const vs1A = annexRow ? get3rd(annexRow[8])  : best8[0]?.team||"3°?";
+  const vs1B = annexRow ? get3rd(annexRow[9])  : best8[1]?.team||"3°?";
+  const vs1D = annexRow ? get3rd(annexRow[10]) : best8[2]?.team||"3°?";
+  const vs1E = annexRow ? get3rd(annexRow[11]) : best8[3]?.team||"3°?";
+  const vs1G = annexRow ? get3rd(annexRow[12]) : best8[4]?.team||"3°?";
+  const vs1I = annexRow ? get3rd(annexRow[13]) : best8[5]?.team||"3°?";
+  const vs1K = annexRow ? get3rd(annexRow[14]) : best8[6]?.team||"3°?";
+  const vs1L = annexRow ? get3rd(annexRow[15]) : best8[7]?.team||"3°?";
+
+  // Helpers
   const w1 = g => classified[g]?.[0]||`1°${g}`;
   const w2 = g => classified[g]?.[1]||`2°${g}`;
-  const t3 = (i) => best8thirds[i]||`3°(${i+1})`;
 
-  // 3. RONDA DE 32 — fixture oficial FIFA
-  // Basado en: https://worldcupwiki.com/schedule/
+  // 4. RONDA DE 32 — fixture oficial FIFA con terceros según Annex C
+  // Match 73: 2°A vs 2°B
+  // Match 74: 1°E vs mejor 3° (A/B/C/D/F) → vs1E
+  // Match 75: 1°F vs 2°C
+  // Match 76: 1°C vs 2°F
+  // Match 77: 1°I vs mejor 3° (C/D/F/G/H) → vs1I
+  // Match 78: 2°E vs 2°I
+  // Match 79: 1°A vs mejor 3° (C/E/F/H/I) → vs1A
+  // Match 80: 1°L vs mejor 3° (E/H/I/J/K) → vs1L
+  // Match 81: 1°D vs mejor 3° (B/E/F/I/J) → vs1D
+  // Match 82: 1°G vs mejor 3° (A/E/H/I/J) → vs1G
+  // Match 83: 2°K vs 2°L
+  // Match 84: 1°H vs 2°J
+  // Match 85: 1°B vs mejor 3° (E/F/G/I/J) → vs1B
+  // Match 86: 1°J vs 2°H
+  // Match 87: 1°K vs mejor 3° (D/E/I/J/L) → vs1K
+  // Match 88: 2°D vs 2°G
   const r32 = [
-    {id:"R32_1", home:w2("A"), away:w2("B"),          date:"Dom 28 Jun", city:"Inglewood"},
-    {id:"R32_2", home:w1("E"), away:t3(0),             date:"Lun 29 Jun", city:"Foxborough"},
-    {id:"R32_3", home:w1("F"), away:w2("C"),           date:"Lun 29 Jun", city:"Monterrey"},
-    {id:"R32_4", home:w1("C"), away:w2("F"),           date:"Lun 29 Jun", city:"Houston"},
-    {id:"R32_5", home:w2("E"), away:w2("I"),           date:"Mar 30 Jun", city:"Arlington"},
-    {id:"R32_6", home:w1("I"), away:t3(1),             date:"Mar 30 Jun", city:"East Rutherford"},
-    {id:"R32_7", home:w1("A"), away:t3(2),             date:"Mar 30 Jun", city:"Ciudad de México"},
-    {id:"R32_8", home:w1("L"), away:t3(3),             date:"Mié 1 Jul",  city:"Atlanta"},
-    {id:"R32_9", home:w1("G"), away:t3(4),             date:"Mié 1 Jul",  city:"Seattle"},
-    {id:"R32_10",home:w1("D"), away:t3(5),             date:"Mié 1 Jul",  city:"Santa Clara"},
-    {id:"R32_11",home:w1("H"), away:w2("J"),           date:"Jue 2 Jul",  city:"Inglewood"},
-    {id:"R32_12",home:w2("K"), away:w2("L"),           date:"Jue 2 Jul",  city:"Toronto"},
-    {id:"R32_13",home:w1("B"), away:t3(6),             date:"Jue 2 Jul",  city:"Vancouver"},
-    {id:"R32_14",home:w2("D"), away:w2("G"),           date:"Vie 3 Jul",  city:"Arlington"},
-    {id:"R32_15",home:w1("J"), away:w2("H"),           date:"Vie 3 Jul",  city:"Miami Gardens"},
-    {id:"R32_16",home:w1("K"), away:t3(7),             date:"Vie 3 Jul",  city:"Kansas City"},
+    {id:"R32_1",  home:w2("A"),  away:w2("B"),  date:"Dom 28 Jun", city:"Inglewood"},
+    {id:"R32_2",  home:w1("E"),  away:vs1E,      date:"Lun 29 Jun", city:"Foxborough"},
+    {id:"R32_3",  home:w1("F"),  away:w2("C"),   date:"Lun 29 Jun", city:"Monterrey"},
+    {id:"R32_4",  home:w1("C"),  away:w2("F"),   date:"Lun 29 Jun", city:"Houston"},
+    {id:"R32_5",  home:w2("E"),  away:w2("I"),   date:"Mar 30 Jun", city:"Arlington"},
+    {id:"R32_6",  home:w1("I"),  away:vs1I,      date:"Mar 30 Jun", city:"East Rutherford"},
+    {id:"R32_7",  home:w1("A"),  away:vs1A,      date:"Mar 30 Jun", city:"Ciudad de México"},
+    {id:"R32_8",  home:w1("L"),  away:vs1L,      date:"Mié 1 Jul",  city:"Atlanta"},
+    {id:"R32_9",  home:w1("G"),  away:vs1G,      date:"Mié 1 Jul",  city:"Seattle"},
+    {id:"R32_10", home:w1("D"),  away:vs1D,      date:"Mié 1 Jul",  city:"Santa Clara"},
+    {id:"R32_11", home:w1("H"),  away:w2("J"),   date:"Jue 2 Jul",  city:"Inglewood"},
+    {id:"R32_12", home:w2("K"),  away:w2("L"),   date:"Jue 2 Jul",  city:"Toronto"},
+    {id:"R32_13", home:w1("B"),  away:vs1B,      date:"Jue 2 Jul",  city:"Vancouver"},
+    {id:"R32_14", home:w2("D"),  away:w2("G"),   date:"Vie 3 Jul",  city:"Arlington"},
+    {id:"R32_15", home:w1("J"),  away:w2("H"),   date:"Vie 3 Jul",  city:"Miami Gardens"},
+    {id:"R32_16", home:w1("K"),  away:vs1K,      date:"Vie 3 Jul",  city:"Kansas City"},
   ];
 
   r32.forEach(m=>{
-    bracket[m.id]={home:m.home, away:m.away, date:m.date, city:m.city, phase:"round32", label:`${m.home} vs ${m.away}`};
+    bracket[m.id]={home:m.home,away:m.away,date:m.date,city:m.city,phase:"round32",label:`${m.home} vs ${m.away}`};
   });
 
   // Helper para obtener ganador de ronda 32 según pronóstico (con penales)

@@ -161,8 +161,179 @@ function calcPoints(pred,actual,phase){
 }
 
 // ============================================================
-// LIVE RESULTS via Claude API + Web Search
+// BRACKET ENGINE — calcula clasificados y cruces según pronósticos
 // ============================================================
+
+// Calcula la tabla de posiciones de un grupo basado en pronósticos del usuario
+function calcGroupStandings(group, preds){
+  const teams = GROUPS[group];
+  const standings = teams.map(t=>({team:t,PJ:0,G:0,E:0,P:0,GF:0,GC:0,DG:0,PTS:0}));
+  const idx = t => standings.findIndex(s=>s.team===t);
+
+  GROUP_MATCHES.filter(m=>m.group===group).forEach(m=>{
+    const pred=preds[m.id];
+    if(!pred||pred.home===""||pred.away==="") return;
+    const h=parseInt(pred.home), a=parseInt(pred.away);
+    if(isNaN(h)||isNaN(a)) return;
+    const hi=idx(m.home), ai=idx(m.away);
+    if(hi===-1||ai===-1) return;
+    standings[hi].PJ++; standings[hi].GF+=h; standings[hi].GC+=a; standings[hi].DG+=(h-a);
+    standings[ai].PJ++; standings[ai].GF+=a; standings[ai].GC+=h; standings[ai].DG+=(a-h);
+    if(h>a){ standings[hi].G++; standings[hi].PTS+=3; standings[ai].P++; }
+    else if(a>h){ standings[ai].G++; standings[ai].PTS+=3; standings[hi].P++; }
+    else { standings[hi].E++; standings[hi].PTS++; standings[ai].E++; standings[ai].PTS++; }
+  });
+  return standings.sort((a,b)=>b.PTS-a.PTS||b.DG-a.DG||b.GF-a.GF);
+}
+
+// Obtiene el ganador de un partido eliminatorio según pronóstico del usuario
+function getKnockoutWinner(matchId, preds){
+  const pred=preds[matchId];
+  if(!pred||pred.home===""||pred.away==="") return null;
+  const h=parseInt(pred.home), a=parseInt(pred.away);
+  if(isNaN(h)||isNaN(a)) return null;
+  // En eliminatorias, si empate consideramos que va a penales y avanza el local (simplificación)
+  if(h>=a) return pred._home;
+  return pred._away;
+}
+
+// Construye el bracket completo personalizado basado en pronósticos del usuario
+// Retorna un mapa: matchId → {home, away, date, city, phase, label}
+function buildPersonalBracket(preds){
+  const bracket = {};
+
+  // 1. Calcular clasificados por grupo
+  const classified = {}; // {A: [1ro, 2do, 3ro, 4to], ...}
+  Object.keys(GROUPS).forEach(g=>{
+    const standings = calcGroupStandings(g, preds);
+    classified[g] = standings.map(s=>s.team);
+  });
+
+  // 2. Calcular mejores terceros (top 8 de los 12 grupos)
+  // Puntos de los terceros lugares
+  const thirds = Object.keys(GROUPS).map(g=>({
+    group:g,
+    team: classified[g][2]||"?",
+    pts: calcGroupStandings(g,preds)[2]?.PTS||0,
+    dg:  calcGroupStandings(g,preds)[2]?.DG||0,
+    gf:  calcGroupStandings(g,preds)[2]?.GF||0,
+  })).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
+  const best8thirds = thirds.slice(0,8).map(t=>t.team);
+
+  // Helper
+  const w1 = g => classified[g]?.[0]||`1°${g}`;
+  const w2 = g => classified[g]?.[1]||`2°${g}`;
+  const t3 = (i) => best8thirds[i]||`3°(${i+1})`;
+
+  // 3. RONDA DE 32 — fixture oficial FIFA
+  // Basado en: https://worldcupwiki.com/schedule/
+  const r32 = [
+    {id:"R32_1", home:w2("A"), away:w2("B"),          date:"Dom 28 Jun", city:"Inglewood"},
+    {id:"R32_2", home:w1("E"), away:t3(0),             date:"Lun 29 Jun", city:"Foxborough"},
+    {id:"R32_3", home:w1("F"), away:w2("C"),           date:"Lun 29 Jun", city:"Monterrey"},
+    {id:"R32_4", home:w1("C"), away:w2("F"),           date:"Lun 29 Jun", city:"Houston"},
+    {id:"R32_5", home:w2("E"), away:w2("I"),           date:"Mar 30 Jun", city:"Arlington"},
+    {id:"R32_6", home:w1("I"), away:t3(1),             date:"Mar 30 Jun", city:"East Rutherford"},
+    {id:"R32_7", home:w1("A"), away:t3(2),             date:"Mar 30 Jun", city:"Ciudad de México"},
+    {id:"R32_8", home:w1("L"), away:t3(3),             date:"Mié 1 Jul",  city:"Atlanta"},
+    {id:"R32_9", home:w1("G"), away:t3(4),             date:"Mié 1 Jul",  city:"Seattle"},
+    {id:"R32_10",home:w1("D"), away:t3(5),             date:"Mié 1 Jul",  city:"Santa Clara"},
+    {id:"R32_11",home:w1("H"), away:w2("J"),           date:"Jue 2 Jul",  city:"Inglewood"},
+    {id:"R32_12",home:w2("K"), away:w2("L"),           date:"Jue 2 Jul",  city:"Toronto"},
+    {id:"R32_13",home:w1("B"), away:t3(6),             date:"Jue 2 Jul",  city:"Vancouver"},
+    {id:"R32_14",home:w2("D"), away:w2("G"),           date:"Vie 3 Jul",  city:"Arlington"},
+    {id:"R32_15",home:w1("J"), away:w2("H"),           date:"Vie 3 Jul",  city:"Miami Gardens"},
+    {id:"R32_16",home:w1("K"), away:t3(7),             date:"Vie 3 Jul",  city:"Kansas City"},
+  ];
+
+  r32.forEach(m=>{
+    bracket[m.id]={home:m.home, away:m.away, date:m.date, city:m.city, phase:"round32", label:`${m.home} vs ${m.away}`};
+  });
+
+  // Helper para obtener ganador de ronda 32 según pronóstico
+  const winR32 = (id) => {
+    const m = bracket[id];
+    if(!m) return "?";
+    const pred = preds[id];
+    if(!pred||pred.home===""||pred.away==="") return `G(${id})`;
+    const h=parseInt(pred.home), a=parseInt(pred.away);
+    if(isNaN(h)||isNaN(a)) return `G(${id})`;
+    return h>=a ? m.home : m.away;
+  };
+
+  // 4. OCTAVOS DE FINAL
+  const r16 = [
+    {id:"R16_1", home:winR32("R32_1"), away:winR32("R32_3"),  date:"Sáb 4 Jul",  city:"Houston"},
+    {id:"R16_2", home:winR32("R32_2"), away:winR32("R32_6"),  date:"Sáb 4 Jul",  city:"Philadelphia"},
+    {id:"R16_3", home:winR32("R32_4"), away:winR32("R32_5"),  date:"Dom 5 Jul",  city:"East Rutherford"},
+    {id:"R16_4", home:winR32("R32_7"), away:winR32("R32_8"),  date:"Dom 5 Jul",  city:"Ciudad de México"},
+    {id:"R16_5", home:winR32("R32_11"),away:winR32("R32_12"), date:"Lun 6 Jul",  city:"Arlington"},
+    {id:"R16_6", home:winR32("R32_9"), away:winR32("R32_10"), date:"Lun 6 Jul",  city:"Seattle"},
+    {id:"R16_7", home:winR32("R32_15"),away:winR32("R32_14"), date:"Mar 7 Jul",  city:"Atlanta"},
+    {id:"R16_8", home:winR32("R32_13"),away:winR32("R32_16"), date:"Mar 7 Jul",  city:"Vancouver"},
+  ];
+  r16.forEach(m=>{
+    bracket[m.id]={home:m.home, away:m.away, date:m.date, city:m.city, phase:"round16", label:`${m.home} vs ${m.away}`};
+  });
+
+  const winR16 = (id) => {
+    const m = bracket[id]; if(!m) return "?";
+    const pred=preds[id];
+    if(!pred||pred.home===""||pred.away==="") return `G(${id})`;
+    const h=parseInt(pred.home), a=parseInt(pred.away);
+    if(isNaN(h)||isNaN(a)) return `G(${id})`;
+    return h>=a ? m.home : m.away;
+  };
+
+  // 5. CUARTOS
+  const qf = [
+    {id:"QF1", home:winR16("R16_1"), away:winR16("R16_2"), date:"Jue 9 Jul",  city:"Foxborough"},
+    {id:"QF2", home:winR16("R16_5"), away:winR16("R16_6"), date:"Vie 10 Jul", city:"Inglewood"},
+    {id:"QF3", home:winR16("R16_3"), away:winR16("R16_4"), date:"Sáb 11 Jul", city:"Miami Gardens"},
+    {id:"QF4", home:winR16("R16_7"), away:winR16("R16_8"), date:"Sáb 11 Jul", city:"Kansas City"},
+  ];
+  qf.forEach(m=>{
+    bracket[m.id]={home:m.home, away:m.away, date:m.date, city:m.city, phase:"quarters", label:`${m.home} vs ${m.away}`};
+  });
+
+  const winQF = (id) => {
+    const m=bracket[id]; if(!m) return "?";
+    const pred=preds[id];
+    if(!pred||pred.home===""||pred.away==="") return `G(${id})`;
+    const h=parseInt(pred.home), a=parseInt(pred.away);
+    if(isNaN(h)||isNaN(a)) return `G(${id})`;
+    return h>=a ? m.home : m.away;
+  };
+
+  // 6. SEMIS
+  bracket["SF1"]={home:winQF("QF1"), away:winQF("QF2"), date:"Mar 14 Jul", city:"Arlington",     phase:"semis", label:`${winQF("QF1")} vs ${winQF("QF2")}`};
+  bracket["SF2"]={home:winQF("QF3"), away:winQF("QF4"), date:"Mié 15 Jul", city:"Atlanta",       phase:"semis", label:`${winQF("QF3")} vs ${winQF("QF4")}`};
+
+  const winSF = (id) => {
+    const m=bracket[id]; if(!m) return "?";
+    const pred=preds[id];
+    if(!pred||pred.home===""||pred.away==="") return `G(${id})`;
+    const h=parseInt(pred.home), a=parseInt(pred.away);
+    if(isNaN(h)||isNaN(a)) return `G(${id})`;
+    return h>=a ? m.home : m.away;
+  };
+  const loseSF = (id) => {
+    const m=bracket[id]; if(!m) return "?";
+    const pred=preds[id];
+    if(!pred||pred.home===""||pred.away==="") return `P(${id})`;
+    const h=parseInt(pred.home), a=parseInt(pred.away);
+    if(isNaN(h)||isNaN(a)) return `P(${id})`;
+    return h>=a ? m.away : m.home;
+  };
+
+  // 7. TERCER LUGAR & FINAL
+  bracket["3RD"]  ={home:loseSF("SF1"), away:loseSF("SF2"), date:"Sáb 18 Jul", city:"Miami Gardens", phase:"third", label:`${loseSF("SF1")} vs ${loseSF("SF2")}`};
+  bracket["FINAL"]={home:winSF("SF1"),  away:winSF("SF2"),  date:"Dom 19 Jul", city:"East Rutherford",phase:"final", label:`${winSF("SF1")} vs ${winSF("SF2")}`};
+
+  return bracket;
+}
+
+
 async function fetchLiveResults(matchesToSearch){
   const matchList=matchesToSearch.map(m=>{
     const label=m.home&&m.away?`${m.home} vs ${m.away}`:m.label;
@@ -801,15 +972,39 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
       )}
       {tab==="knockouts"&&(
         <div>
-          {[{key:"round32",label:"Ronda de 32"},{key:"round16",label:"Octavos"},{key:"quarters",label:"Cuartos"},{key:"semis",label:"Semifinales"},{key:"third",label:"Tercer Lugar"},{key:"final",label:"⚽ Gran Final"}].map(ph=>{
-            const ms=KNOCKOUT_ROUNDS.filter(r=>r.phase===ph.key);
-            return(
+          {/* Info banner */}
+          <div style={{background:"rgba(30,136,229,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",gap:10,alignItems:"flex-start"}}>
+            <span style={{fontSize:20,flexShrink:0}}>🧠</span>
+            <div style={{fontSize:13,color:"#90a4ae",lineHeight:1.6}}>
+              Los equipos en cada partido <strong style={{color:"#4fc3f7"}}>se calculan automáticamente</strong> según tus pronósticos de grupos.
+              A medida que avances ingresando resultados, el bracket se actualiza para las siguientes fases.
+            </div>
+          </div>
+          {(()=>{
+            const bracket = buildPersonalBracket(myPreds);
+            return [
+              {key:"round32", label:"Ronda de 32",    ids:["R32_1","R32_2","R32_3","R32_4","R32_5","R32_6","R32_7","R32_8","R32_9","R32_10","R32_11","R32_12","R32_13","R32_14","R32_15","R32_16"]},
+              {key:"round16", label:"Octavos de Final",ids:["R16_1","R16_2","R16_3","R16_4","R16_5","R16_6","R16_7","R16_8"]},
+              {key:"quarters",label:"Cuartos de Final",ids:["QF1","QF2","QF3","QF4"]},
+              {key:"semis",   label:"Semifinales",     ids:["SF1","SF2"]},
+              {key:"third",   label:"🥉 Tercer Lugar", ids:["3RD"]},
+              {key:"final",   label:"⚽ Gran Final",   ids:["FINAL"]},
+            ].map(ph=>(
               <div key={ph.key} style={S.card}>
                 <h3 style={S.cardTitle}>{ph.label}</h3>
-                {ms.map(m=><MatchRow key={m.id} match={m} pred={myPreds[m.id]} result={results[m.id]} savePrediction={savePrediction}/>)}
+                {ph.ids.map(id=>{
+                  const bm = bracket[id];
+                  const matchObj = bm
+                    ? {id, phase:ph.key, home:bm.home, away:bm.away, date:bm.date, city:bm.city, label:bm.label}
+                    : {id, phase:ph.key, label:id};
+                  return(
+                    <MatchRow key={id} match={matchObj} pred={myPreds[id]}
+                      result={results[id]} savePrediction={savePrediction}/>
+                  );
+                })}
               </div>
-            );
-          })}
+            ));
+          })()}
         </div>
       )}
       {tab==="champion"&&(
@@ -1180,9 +1375,18 @@ function SponsorsPage(){
       <div style={S.card}>
         <h3 style={S.cardTitle}>📦 Paquetes disponibles</h3>
         <p style={{color:"#546e7a",fontSize:13,marginBottom:16}}>
-          Solo quedan <strong style={{color:"#f9a825"}}>3 cupos</strong> disponibles — uno por categoría.
-          Los premios son <strong style={{color:"#81c784"}}>100% bonos digitales</strong>, sin efectivo.
+          Todos los aportes son <strong style={{color:"#81c784"}}>100% bonos digitales</strong>, sin efectivo.
         </p>
+        {/* Prize table clarification */}
+        <div style={{background:"rgba(249,168,37,.08)",border:"1px solid rgba(249,168,37,.3)",borderRadius:10,padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
+          <span style={{fontSize:24,flexShrink:0}}>📢</span>
+          <div>
+            <div style={{fontWeight:700,fontSize:14,color:"#f9a825",marginBottom:4}}>Tabla de premiación</div>
+            <div style={{fontSize:13,color:"#b0bec5",lineHeight:1.7}}>
+              La tabla de premiación en regalos y bonos digitales de los patrocinadores <strong style={{color:"#fff"}}>se definirá antes del primer partido del Mundial</strong>, de acuerdo al número de participantes y patrocinadores confirmados. ¡Entre más patrocinadores, más premios para todos!
+            </div>
+          </div>
+        </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {spots.map(s=>(
             <div key={s.pos} style={{background:"rgba(255,255,255,.03)",border:`1px solid ${s.color}40`,borderLeft:`4px solid ${s.color}`,borderRadius:10,padding:"16px 20px"}}>

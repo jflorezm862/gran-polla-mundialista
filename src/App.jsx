@@ -250,7 +250,7 @@ function buildPersonalBracket(preds){
     bracket[m.id]={home:m.home, away:m.away, date:m.date, city:m.city, phase:"round32", label:`${m.home} vs ${m.away}`};
   });
 
-  // Helper para obtener ganador de ronda 32 según pronóstico
+  // Helper para obtener ganador de ronda 32 según pronóstico (con penales)
   const winR32 = (id) => {
     const m = bracket[id];
     if(!m) return "?";
@@ -258,7 +258,15 @@ function buildPersonalBracket(preds){
     if(!pred||pred.home===""||pred.away==="") return `G(${id})`;
     const h=parseInt(pred.home), a=parseInt(pred.away);
     if(isNaN(h)||isNaN(a)) return `G(${id})`;
-    return h>=a ? m.home : m.away;
+    if(h>a) return m.home;
+    if(a>h) return m.away;
+    // Empate → penales
+    if(pred.penHome&&pred.penAway){
+      const ph=parseInt(pred.penHome), pa=parseInt(pred.penAway);
+      if(ph>pa) return m.home;
+      if(pa>ph) return m.away;
+    }
+    return m.home; // default local si no hay penales
   };
 
   // 4. OCTAVOS DE FINAL
@@ -687,8 +695,10 @@ export default function App(){
   }
 
   // ── Save predictions ──────────────────────────────────────
-  async function savePrediction(id,h,a){
-    const updated={...myPreds,[id]:{home:h,away:a}};
+  async function savePrediction(id,h,a,penHome="",penAway=""){
+    const entry={home:h,away:a};
+    if(penHome!==""&&penAway!==""){entry.penHome=penHome;entry.penAway=penAway;}
+    const updated={...myPreds,[id]:entry};
     setMyPreds(updated);
     await setDoc(doc(db,"predictions",fbUser.uid),{matches:updated},{merge:true});
   }
@@ -1136,18 +1146,38 @@ function GroupStandingsTable({group, teams, myPreds}){
 }
 
 function MatchRow({match,pred,result,savePrediction}){
+  const isKnockout = ["round32","round16","quarters","semis","third","final"].includes(match.phase);
   const [h,setH]=useState(pred?.home??"");
   const [a,setA]=useState(pred?.away??"");
-  useEffect(()=>{setH(pred?.home??"");setA(pred?.away??"");},[pred]);
-  const scored=result&&result.home!==""&&result.away!=="";
-  const pts=scored?calcPoints(pred,result,match.phase):null;
-  const maxPts=scored?(POINTS[match.phase]?.exactScore||3):null;
-  const label=match.label||(match.home&&match.away?`${match.home} vs ${match.away}`:"");
-  function onBlur(){if(h!==""&&a!=="") savePrediction(match.id,h,a);}
+  const [ph,setPh]=useState(pred?.penHome??""); // penales local
+  const [pa,setPa]=useState(pred?.penAway??""); // penales visitante
+  useEffect(()=>{
+    setH(pred?.home??""); setA(pred?.away??"");
+    setPh(pred?.penHome??""); setPa(pred?.penAway??"");
+  },[pred]);
+
+  const isDraw = h!==""&&a!==""&&parseInt(h)===parseInt(a);
+  const scored = result&&result.home!==""&&result.away!=="";
+  const pts = scored?calcPoints(pred,result,match.phase):null;
+  const maxPts = scored?(POINTS[match.phase]?.exactScore||3):null;
+  const label = match.label||(match.home&&match.away?`${match.home} vs ${match.away}`:"");
+
+  function onBlur(){
+    if(h===""||a==="") return;
+    const penH = (isKnockout&&isDraw) ? ph : "";
+    const penA = (isKnockout&&isDraw) ? pa : "";
+    // Validate penalties: must have a winner
+    if(isKnockout&&isDraw&&ph!==""&&pa!==""){
+      if(parseInt(ph)===parseInt(pa)){return;} // no winner in penalties — don't save
+    }
+    savePrediction(match.id, h, a, penH, penA);
+  }
+
   const rowBg=scored?(pts===maxPts?"rgba(129,199,132,.08)":pts>0?"rgba(249,168,37,.07)":"rgba(239,83,80,.06)"):"transparent";
+
   return(
     <div style={{...S.matchRow,background:rowBg,flexDirection:"column",alignItems:"flex-start",gap:6}}>
-      {/* Date/time/city header */}
+      {/* Date/time/city */}
       {(match.date||match.city) && (
         <div style={{display:"flex",gap:12,fontSize:11,color:"#546e7a",letterSpacing:.5}}>
           {match.date && <span>📅 {match.date}</span>}
@@ -1155,22 +1185,48 @@ function MatchRow({match,pred,result,savePrediction}){
           {match.city && <span>📍 {match.city}</span>}
         </div>
       )}
-      {/* Match row */}
+      {/* Score row */}
       <div style={{display:"flex",alignItems:"center",gap:12,width:"100%",flexWrap:"wrap"}}>
         <span style={{flex:1,fontSize:14,fontWeight:600,minWidth:140,color:"#cfd8dc"}}>{label}</span>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} onBlur={onBlur} placeholder="—"/>
+          <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h}
+            onChange={e=>setH(e.target.value)} onBlur={onBlur} placeholder="—"/>
           <span style={{color:"#f9a825",fontWeight:900,fontSize:22,lineHeight:1}}>:</span>
-          <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} onBlur={onBlur} placeholder="—"/>
+          <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a}
+            onChange={e=>setA(e.target.value)} onBlur={onBlur} placeholder="—"/>
         </div>
         {scored&&(
           <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13}}>
             <span style={{color:"#37474f"}}>Real:</span>
             <span style={{fontWeight:800,color:"#eceff1"}}>{result.home}–{result.away}</span>
+            {result.penHome&&<span style={{color:"#4fc3f7",fontSize:11}}>(pen {result.penHome}–{result.penAway})</span>}
             <span style={{background:pts===maxPts?"#1b5e20":pts>0?"#e65100":"#b71c1c",color:"#fff",padding:"2px 8px",borderRadius:4,fontWeight:800,fontSize:12}}>+{pts}pts</span>
           </div>
         )}
       </div>
+      {/* Penalty field — only for knockout + draw */}
+      {isKnockout && isDraw && (
+        <div style={{display:"flex",alignItems:"center",gap:10,paddingLeft:8,paddingTop:4,borderTop:"1px dashed rgba(79,195,247,.3)",width:"100%",flexWrap:"wrap"}}>
+          <span style={{fontSize:12,color:"#4fc3f7",fontWeight:700,letterSpacing:.5}}>🥅 PENALES:</span>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <input className="scoreIn" style={{...S.scoreIn,width:44,fontSize:16,borderColor:"rgba(79,195,247,.5)"}}
+              type="number" min="0" max="10" value={ph}
+              onChange={e=>setPh(e.target.value)} onBlur={onBlur} placeholder="—"/>
+            <span style={{color:"#4fc3f7",fontWeight:900,fontSize:18}}>:</span>
+            <input className="scoreIn" style={{...S.scoreIn,width:44,fontSize:16,borderColor:"rgba(79,195,247,.5)"}}
+              type="number" min="0" max="10" value={pa}
+              onChange={e=>setPa(e.target.value)} onBlur={onBlur} placeholder="—"/>
+          </div>
+          {ph!==""&&pa!==""&&parseInt(ph)===parseInt(pa)&&(
+            <span style={{color:"#ef5350",fontSize:11,fontWeight:700}}>⚠️ Debe haber un ganador en penales</span>
+          )}
+          {ph!==""&&pa!==""&&parseInt(ph)!==parseInt(pa)&&(
+            <span style={{color:"#81c784",fontSize:11,fontWeight:700}}>
+              ✓ Avanza: {parseInt(ph)>parseInt(pa)?match.home:match.away}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

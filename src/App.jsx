@@ -1313,24 +1313,35 @@ function MatchRow({match,pred,result,savePrediction,locked}){
         </div>
       )}
       {isKnockout && isDraw && !locked && (
-        <div style={{display:"flex",alignItems:"center",gap:10,paddingLeft:8,paddingTop:4,borderTop:"1px dashed rgba(79,195,247,.3)",width:"100%",flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,paddingLeft:8,paddingTop:6,borderTop:"1px dashed rgba(79,195,247,.3)",width:"100%",flexWrap:"wrap"}}>
           <span style={{fontSize:12,color:"#4fc3f7",fontWeight:700,letterSpacing:.5}}>🥅 PENALES:</span>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <input className="scoreIn" style={{...S.scoreIn,width:44,fontSize:16,borderColor:"rgba(79,195,247,.5)"}}
+            <input className="scoreIn"
+              style={{...S.scoreIn,width:44,fontSize:16,borderColor:"rgba(79,195,247,.5)"}}
               type="number" min="0" max="10" value={ph}
-              onChange={e=>setPh(e.target.value)} onBlur={onBlur} placeholder="—"/>
+              onChange={e=>setPh(e.target.value)}
+              placeholder="—"/>
             <span style={{color:"#4fc3f7",fontWeight:900,fontSize:18}}>:</span>
-            <input className="scoreIn" style={{...S.scoreIn,width:44,fontSize:16,borderColor:"rgba(79,195,247,.5)"}}
+            <input className="scoreIn"
+              style={{...S.scoreIn,width:44,fontSize:16,borderColor:"rgba(79,195,247,.5)"}}
               type="number" min="0" max="10" value={pa}
-              onChange={e=>setPa(e.target.value)} onBlur={onBlur} placeholder="—"/>
+              onChange={e=>setPa(e.target.value)}
+              placeholder="—"/>
           </div>
           {ph!==""&&pa!==""&&parseInt(ph)===parseInt(pa)&&(
-            <span style={{color:"#ef5350",fontSize:11,fontWeight:700}}>⚠️ Debe haber un ganador en penales</span>
+            <span style={{color:"#ef5350",fontSize:11,fontWeight:700}}>⚠️ Debe haber un ganador</span>
           )}
           {ph!==""&&pa!==""&&parseInt(ph)!==parseInt(pa)&&(
-            <span style={{color:"#81c784",fontSize:11,fontWeight:700}}>
-              ✓ Avanza: {parseInt(ph)>parseInt(pa)?match.home:match.away}
-            </span>
+            <>
+              <span style={{color:"#81c784",fontSize:11,fontWeight:700}}>
+                ✓ Avanza: {parseInt(ph)>parseInt(pa)?match.home:match.away}
+              </span>
+              <button
+                style={{background:"#1b5e20",border:"none",borderRadius:6,padding:"5px 12px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}
+                onClick={()=>savePrediction(match.id,h,a,ph,pa)}>
+                💾 Guardar
+              </button>
+            </>
           )}
         </div>
       )}

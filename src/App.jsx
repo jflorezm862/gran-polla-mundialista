@@ -1126,9 +1126,9 @@ function SponsorsPage(){
   ];
 
   const spots=[
-    {pos:"🥇 PATROCINADOR PRINCIPAL",color:"#f9a825",desc:"Logo grande en el header y dashboard · Mención en todas las notificaciones · Logo en pantalla del campeón",bono:"Bono digital desde $200.000 COP"},
-    {pos:"🥈 PATROCINADOR OFICIAL",color:"#bdbdbd",desc:"Logo mediano en el ranking y bracket · Mención en la página de inicio",bono:"Bono digital desde $100.000 COP"},
-    {pos:"🥉 PATROCINADOR COLABORADOR",color:"#a1887f",desc:"Logo en la página de patrocinadores · Enlace a tu negocio o redes sociales",bono:"Bono digital desde $50.000 COP"},
+    {pos:"🥇 PATROCINADOR PRINCIPAL",color:"#f9a825",desc:"Logo grande en el header y dashboard · Mención en todas las notificaciones · Logo en pantalla del campeón · 1 cupo disponible",bono:"Bono digital $500.000 COP"},
+    {pos:"🥈 PATROCINADOR OFICIAL",color:"#bdbdbd",desc:"Logo mediano en el ranking y bracket · Mención en la página de inicio · Varios cupos disponibles",bono:"Bono digital $200.000 COP"},
+    {pos:"🥉 PATROCINADOR COLABORADOR",color:"#a1887f",desc:"Logo en la página de patrocinadores · Enlace a tu negocio o redes sociales · Varios cupos disponibles",bono:"Bono digital $100.000 COP"},
   ];
 
   const currentSponsors=[
@@ -1218,6 +1218,82 @@ function SponsorsPage(){
               <span style={{fontSize:13,color:"#90a4ae",lineHeight:1.6}}>{text}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* MOCKUPS - Así se verá tu logo */}
+      <div style={S.card}>
+        <h3 style={S.cardTitle}>👁️ Así se verá tu logo en la plataforma</h3>
+        <p style={{color:"#546e7a",fontSize:13,marginBottom:20}}>Vista previa de cada ubicación publicitaria durante el torneo.</p>
+
+        {/* PRINCIPAL - Header mockup */}
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#f9a825",marginBottom:10,letterSpacing:1}}>🥇 PATROCINADOR PRINCIPAL — Header de la plataforma</div>
+          <div style={{background:"rgba(8,12,22,.97)",border:"2px solid #f9a825",borderRadius:10,padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#FCD116,#003893,#CE1126)"}}/>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:"#fff",letterSpacing:2}}>GRAN POLLA <span style={{color:"#f9a825"}}>MUNDIALISTA 2026</span></div>
+                <div style={{fontSize:8,color:"#546e7a",letterSpacing:2}}>CANADÁ · MÉXICO · ESTADOS UNIDOS</div>
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{fontSize:9,color:"#546e7a",letterSpacing:1}}>PATROCINADO POR</div>
+              <div style={{background:"rgba(249,168,37,.15)",border:"2px dashed #f9a825",borderRadius:8,padding:"6px 16px",display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:16}}>🏢</span>
+                <div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#f9a825"}}>TU LOGO AQUÍ</div>
+                  <div style={{fontSize:9,color:"#78909c"}}>tu empresa</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:"#37474f",marginTop:6,textAlign:"right"}}>★ Visible en TODAS las páginas · 39 días de exposición</div>
+        </div>
+
+        {/* OFICIAL - Ranking mockup */}
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#bdbdbd",marginBottom:10,letterSpacing:1}}>🥈 PATROCINADOR OFICIAL — Ranking y Bracket</div>
+          <div style={{background:"#131d2e",border:"1px solid #1a2f4a",borderRadius:10,overflow:"hidden"}}>
+            <div style={{background:"rgba(21,101,192,.2)",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:14,fontWeight:700,color:"#fff"}}>🏆 Ranking en Tiempo Real</span>
+              <div style={{background:"rgba(189,189,189,.15)",border:"2px dashed #bdbdbd",borderRadius:6,padding:"4px 12px",display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:14}}>🏪</span>
+                <div style={{fontSize:10,fontWeight:800,color:"#bdbdbd"}}>TU LOGO AQUÍ</div>
+              </div>
+            </div>
+            {[["🥇","Carlos H.","284"],["🥈","Sebastián F.","261"],["🥉","María L.","248"]].map(([med,name,pts])=>(
+              <div key={name} style={{display:"flex",alignItems:"center",padding:"10px 16px",borderBottom:"1px solid rgba(255,255,255,.04)"}}>
+                <span style={{width:40,fontSize:18}}>{med}</span>
+                <span style={{flex:1,fontSize:13,color:"#cfd8dc"}}>{name}</span>
+                <span style={{fontWeight:900,fontSize:18,color:"#f9a825"}}>{pts}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:11,color:"#37474f",marginTop:6,textAlign:"right"}}>★ Visible en Ranking y Bracket durante todo el torneo</div>
+        </div>
+
+        {/* COLABORADOR - Sponsors page mockup */}
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:"#a1887f",marginBottom:10,letterSpacing:1}}>🥉 PATROCINADOR COLABORADOR — Página de Patrocinadores</div>
+          <div style={{background:"#131d2e",border:"1px solid #1a2f4a",borderRadius:10,padding:"16px"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#f9a825",marginBottom:12,letterSpacing:.5}}>🌟 NUESTROS PATROCINADORES</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+              {[
+                {icon:"🍕",name:"Tu Restaurante",cat:"Gastronomía",highlight:true},
+                {icon:"👕",name:"Tu Almacén",cat:"Moda"},
+                {icon:"💻",name:"Tu Servicio",cat:"Digital"},
+              ].map(sp=>(
+                <div key={sp.name} style={{background:sp.highlight?"rgba(161,136,127,.15)":"rgba(255,255,255,.03)",border:sp.highlight?"2px dashed #a1887f":"1px solid #1a2f4a",borderRadius:8,padding:"12px",textAlign:"center"}}>
+                  <div style={{fontSize:28,marginBottom:6}}>{sp.icon}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:sp.highlight?"#a1887f":"#90a4ae"}}>{sp.name}</div>
+                  <div style={{fontSize:10,color:"#37474f",marginTop:2}}>{sp.cat}</div>
+                  {sp.highlight&&<div style={{fontSize:9,color:"#a1887f",marginTop:4,fontWeight:700}}>← TU LOGO AQUÍ</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{fontSize:11,color:"#37474f",marginTop:6,textAlign:"right"}}>★ Enlace directo a tu negocio o redes sociales</div>
         </div>
       </div>
 

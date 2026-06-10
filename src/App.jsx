@@ -1104,7 +1104,7 @@ export default function App(){
         {page==="admin"&&isAdmin&&(
           <AdminPage results={results} saveResult={saveResult}
             phase2Open={phase2Open} phase2Deadline={phase2Deadline} adminSetPhase2={adminSetPhase2}
-            allScores={allScores}/>
+            allScores={allScores} allProfiles={allProfiles} allSubmitted={allSubmitted}/>
         )}
       </main>
     </div>
@@ -2146,11 +2146,26 @@ function ReglasPage(){
 // ============================================================
 // ADMIN PAGE
 // ============================================================
-function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,allScores}){
+function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,allScores,allProfiles,allSubmitted}){
   const [phase,setPhase]=useState("groups");
   const [selGrp,setSelGrp]=useState("A");
   const [deadlineInput,setDeadlineInput]=useState(phase2Deadline||"");
   const [showRanking,setShowRanking]=useState(false);
+  const [copied,setCopied]=useState(false);
+
+  // Users who have NOT submitted yet
+  const pending = Object.entries(allProfiles)
+    .filter(([uid,p]) => !allSubmitted[uid] && !p.isAdmin)
+    .map(([uid,p]) => ({uid, name:p.name, email:p.email||""}));
+
+  const pendingEmails = pending.map(p=>p.email).filter(Boolean).join(", ");
+
+  function copyEmails(){
+    navigator.clipboard.writeText(pendingEmails).then(()=>{
+      setCopied(true);
+      setTimeout(()=>setCopied(false), 2500);
+    });
+  }
 
   const phases=[
     {key:"groups",label:"Grupos"},{key:"round32",label:"Ronda 32"},
@@ -2201,6 +2216,44 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,
           <div style={{marginTop:10,fontSize:12,color:"#90a4ae"}}>
             Límite actual: {new Date(phase2Deadline).toLocaleString("es-CO",{weekday:"long",day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"})}
           </div>
+        )}
+      </div>
+
+      {/* Pending users */}
+      <div style={{...S.card,border:`1px solid ${pending.length>0?"rgba(249,168,37,.4)":"#1a2f4a"}`}}>
+        <h3 style={S.cardTitle}>
+          ⏳ Pendientes por enviar Fase 1
+          <span style={{marginLeft:8,background:"rgba(249,168,37,.2)",color:"#f9a825",fontSize:11,padding:"2px 8px",borderRadius:4,fontWeight:700}}>
+            {pending.length} de {Object.keys(allProfiles).length-1} participantes
+          </span>
+        </h3>
+        {pending.length===0 ? (
+          <p style={{color:"#81c784",fontSize:13}}>✅ ¡Todos los participantes ya enviaron su Fase 1!</p>
+        ):(
+          <>
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+              {pending.map(p=>(
+                <div key={p.uid} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:"rgba(249,168,37,.05)",borderRadius:7,border:"1px solid rgba(249,168,37,.15)"}}>
+                  <span style={{fontSize:16}}>⏳</span>
+                  <span style={{flex:1,fontSize:13,fontWeight:600,color:"#e0e0e0"}}>{p.name}</span>
+                  <span style={{fontSize:12,color:"#546e7a"}}>{p.email}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+              <button style={{background:"linear-gradient(135deg,#1565c0,#1e88e5)",color:"#fff",border:"none",borderRadius:7,padding:"8px 16px",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}
+                onClick={copyEmails}>
+                {copied?"✅ ¡Copiado!":"📋 Copiar correos"}
+              </button>
+              <a href={`mailto:?bcc=${pendingEmails}&subject=⏰ Recordatorio: Envía tus pronósticos — Gran Polla Mundialista 2026&body=Hola!%0D%0A%0D%0ARecordamos que aún no has enviado tus pronósticos de la Fase 1 en la Gran Polla Mundialista 2026.%0D%0A%0D%0A👉 Ingresa aquí: https://granpollamundialista.com%0D%0A%0D%0AUna vez ingreses tus pronósticos en todos los grupos, presiona el botón 🔒 ENVIAR FASE 1 para bloquearlos.%0D%0A%0D%0A¡No te quedes por fuera!%0D%0A%0D%0AOrganización Gran Polla Mundialista 2026`}
+                style={{background:"rgba(129,199,132,.15)",border:"1px solid #81c784",color:"#81c784",borderRadius:7,padding:"8px 16px",fontWeight:700,fontSize:13,textDecoration:"none",fontFamily:"inherit"}}>
+                ✉️ Abrir Gmail con recordatorio
+              </a>
+            </div>
+            <p style={{fontSize:11,color:"#37474f",marginTop:8}}>
+              El botón "Abrir Gmail" abre tu cliente de correo con todos los pendientes en BCC y el mensaje de recordatorio listo.
+            </p>
+          </>
         )}
       </div>
 

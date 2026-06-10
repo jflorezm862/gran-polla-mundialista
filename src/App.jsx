@@ -622,6 +622,8 @@ export default function App(){
   const [myGrpP,setMyGrpP]=useState({});
   const [myChamp,setMyChamp]=useState({});
   const [allScores,setAllScores]=useState([]);
+  const [allPredictions,setAllPredictions]=useState({});
+  const [allSubmitted,setAllSubmitted]=useState({}); // {uid: {matches:{...}}}
   const [submitted,setSubmitted]=useState(false);
   const [submitted2,setSubmitted2]=useState(false); // fase 2 bloqueada
   const [phase2Open,setPhase2Open]=useState(false);  // admin abre fase 2
@@ -698,14 +700,18 @@ export default function App(){
     return unsub;
   },[]);
 
-  // ── Load all predictions for ranking ─────────────────────
+  // ── Load all predictions for ranking + comparativo ───────
   useEffect(()=>{
     if(!Object.keys(allProfiles).length) return;
     const fetchScores=async()=>{
       const scores=[];
+      const allPreds={};
+      const submitted={};
       for(const [uid,prof] of Object.entries(allProfiles)){
         const snap=await getDoc(doc(db,"predictions",uid));
         const preds=snap.exists()?(snap.data().matches||{}):{};
+        allPreds[uid]=preds;
+        submitted[uid]=snap.exists()?(snap.data().submitted===true):false;
         let total=0;
         ALL_MATCHES.forEach(m=>{
           const actual=results[m.id];
@@ -716,6 +722,8 @@ export default function App(){
       }
       scores.sort((a,b)=>b.score-a.score);
       setAllScores(scores);
+      setAllPredictions(allPreds);
+      setAllSubmitted(submitted);
     };
     fetchScores();
   },[allProfiles,results]);
@@ -871,9 +879,11 @@ export default function App(){
   const navItems=fbUser?[
     {key:"dashboard",label:"🏠 Inicio"},
     {key:"predict",label:"🎯 Pronósticos"},
+    {key:"comparativo",label:"📊 Comparativo"},
     {key:"live",label:"📡 En Vivo"},
     {key:"bracket",label:"🏟️ Bracket"},
     {key:"ranking",label:"🏆 Ranking"},
+    {key:"reglas",label:"📋 Reglas"},
     {key:"sponsors",label:"🤝 Patrocinadores"},
     ...(isAdmin?[{key:"admin",label:"⚙️ Admin"}]:[]),
   ]:[];
@@ -1024,17 +1034,10 @@ export default function App(){
               </div>
               <button style={S.refreshBtn} onClick={refreshLive} disabled={liveStatus?.loading}>🔄 Actualizar</button>
             </div>
-            <div style={S.card}>
-              <h3 style={S.cardTitle}>📋 Sistema de Puntuación</h3>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}}>
-                {[["Resultado exacto — Grupos","3 pts","#81c784"],["Resultado correcto — Grupos","1 pt","#aed581"],["Exacto — Ronda 32","4 pts","#4fc3f7"],["Exacto — Octavos","5 pts","#4dd0e1"],["Exacto — Cuartos","6 pts","#f9a825"],["Exacto — Semis","7 pts","#ffa726"],["Exacto — Final","10 pts","#ef5350"],["1° posición grupo","6 pts","#f9a825"],["2° posición grupo","4 pts","#bdbdbd"],["3° posición grupo","2 pts","#a1887f"],["Acertar campeón","15 pts","#f9a825"],["Acertar subcampeón","10 pts","#bdbdbd"]].map(([k,v,c])=>(
-                  <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",background:"rgba(255,255,255,.02)",borderRadius:6}}>
-                    <span style={{color:"#78909c",fontSize:13}}>{k}</span>
-                    <span style={{color:c,fontWeight:800,fontSize:14}}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+
+            {/* ── EPIC WORLD CUP BANNER ── */}
+            <WorldCupBanner totalPlayed={totalPlayed} allScores={allScores}/>
+
             <button style={S.btnPrimary} onClick={()=>setPage("predict")}>🎯 IR A MIS PRONÓSTICOS</button>
           </div>
         )}
@@ -1055,6 +1058,17 @@ export default function App(){
 
         {/* BRACKET */}
         {page==="bracket"&&<BracketPage results={results}/>}
+
+        {/* COMPARATIVO */}
+        {page==="comparativo"&&fbUser&&(
+          <ComparativoPage
+            allProfiles={allProfiles}
+            allPredictions={allPredictions}
+            allSubmitted={allSubmitted}
+            results={results}
+            currentUid={fbUser?.uid}
+          />
+        )}
 
         {/* RANKING */}
         {page==="ranking"&&(
@@ -1081,6 +1095,9 @@ export default function App(){
 
         {/* SPONSORS */}
         {page==="sponsors"&&<SponsorsPage/>}
+
+        {/* REGLAS */}
+        {page==="reglas"&&<ReglasPage/> }
 
         {/* ADMIN */}
         {page==="admin"&&isAdmin&&(
@@ -1690,6 +1707,47 @@ function LivePage({results,refreshLive,liveStatus,saveResult,addNote}){
 // ============================================================
 // ADMIN PAGE
 // ============================================================
+function AdminPage({results,saveResult}){
+  const [phase,setPhase]=useState("groups");
+  const [selGrp,setSelGrp]=useState("A");
+  const phases=[{key:"groups",label:"Grupos"},{key:"round32",label:"Ronda 32"},{key:"round16",label:"Octavos"},{key:"quarters",label:"Cuartos"},{key:"semis",label:"Semis"},{key:"third",label:"3er Lugar"},{key:"final",label:"Final"}];
+  const matches=phase==="groups"?GROUP_MATCHES.filter(m=>m.group===selGrp):KNOCKOUT_ROUNDS.filter(m=>m.phase===phase);
+  return(
+    <div style={S.section}>
+      <h2 style={S.sectionTitle}>⚙️ Panel Admin</h2>
+      <div style={S.tabRow}>
+        {phases.map(p=><button key={p.key} onClick={()=>setPhase(p.key)} style={{...S.tab,...(phase===p.key?S.tabActive:{})}}>{p.label}</button>)}
+      </div>
+      {phase==="groups"&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+          {Object.keys(GROUPS).map(g=><button key={g} onClick={()=>setSelGrp(g)} style={{...S.groupTab,...(selGrp===g?S.groupTabActive:{})}}>{g}</button>)}
+        </div>
+      )}
+      <div style={S.card}>
+        {matches.map(m=>{
+          const res=results[m.id];
+          const [h,setH]=useState(res?.home??"");
+          const [a,setA]=useState(res?.away??"");
+          const saved=res&&res.home!=="";
+          const label=m.label||(m.home&&m.away?`${m.home} vs ${m.away}`:"");
+          return(
+            <div key={m.id} style={{...S.matchRow,...(saved?{borderLeft:"3px solid #81c784",paddingLeft:10}:{})}}>
+              <span style={{flex:1,fontSize:14,fontWeight:600,color:"#cfd8dc",minWidth:140}}>{label}</span>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} placeholder="—"/>
+                <span style={{color:"#f9a825",fontWeight:900,fontSize:22}}>:</span>
+                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} placeholder="—"/>
+                <button style={{background:"#1b5e20",border:"none",borderRadius:6,padding:"7px 14px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}
+                  onClick={()=>{if(h!==""&&a!=="")saveResult(m.id,h,a);}}>✓ Guardar</button>
+              </div>
+              {saved&&<span style={{color:"#81c784",fontSize:12}}>✓ {res.home}–{res.away}</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ============================================================
 // SPONSORS PAGE
@@ -1928,6 +1986,205 @@ function SponsorsPage(){
 }
 
 // ============================================================
+// WORLD CUP BANNER
+// ============================================================
+function WorldCupBanner({totalPlayed, allScores}){
+  const [tick, setTick] = useState(0);
+  const [ballAngle, setBallAngle] = useState(0);
+  const [flagIdx, setFlagIdx] = useState(0);
+
+  const TOURNAMENT_END   = new Date("2026-07-19T21:00:00-05:00");
+  const TOURNAMENT_START = new Date("2026-06-11T14:00:00-05:00");
+  const now = new Date();
+  const totalMs = TOURNAMENT_END - TOURNAMENT_START;
+  const elapsed = Math.max(0, Math.min(now - TOURNAMENT_START, totalMs));
+  const progress = Math.round((elapsed / totalMs) * 100);
+  const daysLeft = Math.max(0, Math.ceil((TOURNAMENT_END - now) / 86400000));
+
+  const flags = [
+    {flag:"🇲🇽", name:"México",  color:"#006847"},
+    {flag:"🇺🇸", name:"USA",     color:"#B22234"},
+    {flag:"🇨🇦", name:"Canadá",  color:"#FF0000"},
+  ];
+
+  useEffect(()=>{
+    const t = setInterval(()=>{ setTick(n=>n+1); setBallAngle(a=>(a+2)%360); }, 50);
+    const f = setInterval(()=>setFlagIdx(i=>(i+1)%3), 3000);
+    return()=>{clearInterval(t);clearInterval(f);};
+  },[]);
+
+  const curFlag = flags[flagIdx];
+
+  return(
+    <div style={{borderRadius:16,overflow:"hidden",marginBottom:16,position:"relative",
+      background:"linear-gradient(135deg,#050d18 0%,#0a1a2e 40%,#0d1f3c 100%)",
+      border:"1px solid rgba(249,168,37,.2)",
+      boxShadow:"0 8px 32px rgba(0,0,0,.5), 0 0 60px rgba(249,168,37,.05)"}}>
+      {/* Stars */}
+      <div style={{position:"absolute",inset:0,overflow:"hidden",pointerEvents:"none"}}>
+        {[...Array(20)].map((_,i)=>(
+          <div key={i} style={{position:"absolute",width:i%3===0?2:1,height:i%3===0?2:1,
+            borderRadius:"50%",background:"#fff",
+            opacity:0.1+(Math.sin(tick*0.05+i)*0.1),
+            left:`${(i*17+7)%100}%`,top:`${(i*13+5)%100}%`,transition:"opacity .1s"}}/>
+        ))}
+        <div style={{position:"absolute",top:0,left:`${(tick*0.3)%120-20}%`,
+          width:"15%",height:"100%",
+          background:"linear-gradient(90deg,transparent,rgba(255,255,255,.03),transparent)",pointerEvents:"none"}}/>
+      </div>
+
+      <div style={{position:"relative",zIndex:1,padding:"20px 24px"}}>
+        {/* Title + ball */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:12}}>
+          <div>
+            <div style={{fontSize:10,letterSpacing:4,color:"#f9a825",fontWeight:700,marginBottom:4}}>FIFA WORLD CUP</div>
+            <div style={{fontSize:24,fontWeight:900,letterSpacing:2,color:"#fff",lineHeight:1}}>CANADA · MEXICO · USA</div>
+            <div style={{fontSize:36,fontWeight:900,color:"#f9a825",letterSpacing:1,lineHeight:1.1}}>2026</div>
+          </div>
+          <div style={{position:"relative",flexShrink:0}}>
+            <svg width="80" height="80" viewBox="0 0 48 48"
+              style={{filter:"drop-shadow(0 0 16px rgba(252,209,22,.6))",
+                transform:`rotate(${ballAngle}deg)`,transition:"transform .05s linear"}}>
+              <defs>
+                <radialGradient id="wcb" cx="40%" cy="30%" r="70%">
+                  <stop offset="0%" stopColor="#FCD116"/>
+                  <stop offset="45%" stopColor="#003893"/>
+                  <stop offset="100%" stopColor="#CE1126"/>
+                </radialGradient>
+                <clipPath id="wcc"><circle cx="24" cy="24" r="21"/></clipPath>
+              </defs>
+              <circle cx="24" cy="24" r="21" fill="url(#wcb)"/>
+              <ellipse cx="24" cy="10" rx="16" ry="10" fill="#FCD116" opacity=".55" clipPath="url(#wcc)"/>
+              <ellipse cx="24" cy="38" rx="16" ry="10" fill="#CE1126" opacity=".5" clipPath="url(#wcc)"/>
+              <ellipse cx="17" cy="15" rx="5" ry="3" fill="#fff" opacity=".2" transform="rotate(-25,17,15)"/>
+            </svg>
+            <div style={{position:"absolute",inset:-4,borderRadius:"50%",
+              border:"1px solid rgba(249,168,37,.3)",animation:"pulse 2s infinite"}}/>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(90px,1fr))",gap:8,marginBottom:16}}>
+          {[
+            {icon:"⚽",val:totalPlayed,max:104,label:"Partidos"},
+            {icon:"👥",val:allScores.length,max:null,label:"Participantes"},
+            {icon:"📅",val:daysLeft,max:null,label:"Días restantes"},
+            {icon:"🏟️",val:16,max:null,label:"Ciudades sede"},
+          ].map(s=>(
+            <div key={s.label} style={{background:"rgba(255,255,255,.05)",borderRadius:10,padding:"10px 8px",
+              border:"1px solid rgba(255,255,255,.07)",textAlign:"center"}}>
+              <div style={{fontSize:18,marginBottom:3}}>{s.icon}</div>
+              <div style={{fontSize:22,fontWeight:900,color:"#f9a825",lineHeight:1}}>
+                {s.val}{s.max?<span style={{fontSize:11,color:"#546e7a",fontWeight:400}}>/{s.max}</span>:""}
+              </div>
+              <div style={{fontSize:9,color:"#546e7a",letterSpacing:.5,marginTop:2,textTransform:"uppercase"}}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Progress bar */}
+        <div style={{marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#546e7a",marginBottom:4}}>
+            <span>11 Jun 2026</span>
+            <span style={{color:"#f9a825",fontWeight:700}}>🏆 {progress}% del torneo</span>
+            <span>19 Jul 2026</span>
+          </div>
+          <div style={{height:6,background:"rgba(255,255,255,.07)",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",borderRadius:3,width:`${Math.max(1,progress)}%`,
+              background:"linear-gradient(90deg,#003893,#FCD116,#CE1126)",transition:"width .5s"}}/>
+          </div>
+        </div>
+
+        {/* Rotating flag */}
+        <div style={{display:"flex",alignItems:"center",gap:10,
+          background:"rgba(255,255,255,.04)",borderRadius:8,padding:"8px 14px",
+          border:`1px solid ${curFlag.color}40`,transition:"border .5s"}}>
+          <span style={{fontSize:26}}>{curFlag.flag}</span>
+          <div>
+            <div style={{fontSize:10,color:"#546e7a",letterSpacing:1}}>PAÍS SEDE</div>
+            <div style={{fontSize:15,fontWeight:800,color:"#fff"}}>{curFlag.name}</div>
+          </div>
+          <div style={{marginLeft:"auto",fontSize:10,color:"#546e7a",textAlign:"right"}}>
+            <div style={{color:"#f9a825",fontWeight:700,fontSize:11}}>104 partidos</div>
+            <div>48 equipos · 12 grupos</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// REGLAS PAGE
+// ============================================================
+function ReglasPage(){
+  const puntos=[
+    {fase:"Fase de Grupos",items:[["Resultado exacto (score correcto)","3 pts","#81c784"],["Resultado correcto (ganador/empate)","1 pt","#aed581"]]},
+    {fase:"Ronda de 32",items:[["Resultado exacto","4 pts","#4fc3f7"],["Resultado correcto","2 pts","#81d4fa"]]},
+    {fase:"Octavos de Final",items:[["Resultado exacto","5 pts","#4dd0e1"],["Resultado correcto","3 pts","#80deea"]]},
+    {fase:"Cuartos de Final",items:[["Resultado exacto","6 pts","#f9a825"],["Resultado correcto","4 pts","#ffd54f"]]},
+    {fase:"Semifinales",items:[["Resultado exacto","7 pts","#ffa726"],["Resultado correcto","5 pts","#ffcc80"]]},
+    {fase:"Tercer Lugar",items:[["Resultado exacto","8 pts","#ff7043"],["Resultado correcto","6 pts","#ffab91"]]},
+    {fase:"Gran Final",items:[["Resultado exacto","10 pts","#ef5350"],["Resultado correcto","7 pts","#ef9a9a"]]},
+    {fase:"Predicción Campeón",items:[["Acertar campeón","15 pts","#f9a825"],["Acertar subcampeón","10 pts","#bdbdbd"],["Acertar tercer lugar","7 pts","#a1887f"],["Acertar cuarto lugar","5 pts","#90a4ae"]]},
+  ];
+  return(
+    <div style={{animation:"slideIn .3s ease"}}>
+      <h2 style={{fontSize:24,fontWeight:700,marginBottom:22,letterSpacing:1,textTransform:"uppercase",borderBottom:"1px solid #1a2f4a",paddingBottom:10,color:"#e8eaf6"}}>
+        📋 Reglas y Sistema de Puntuación
+      </h2>
+      <div style={{background:"linear-gradient(135deg,#0d2137,#1a3a5c)",borderRadius:12,padding:"20px 24px",marginBottom:16,border:"1px solid #1a2f4a"}}>
+        <h3 style={{fontSize:15,fontWeight:700,color:"#f9a825",marginBottom:12}}>¿Cómo funciona la Gran Polla Mundialista?</h3>
+        {[["1️⃣","Regístrate y completa tus pronósticos de los 72 partidos de la Fase de Grupos (Grupos A–L)."],
+          ["2️⃣","Presiona ENVIAR FASE 1 antes del primer partido para bloquear tus pronósticos. Una vez enviados, no se pueden modificar."],
+          ["3️⃣","Después del 27 de junio se abre la Fase 2: completa tus pronósticos de Eliminatorias hasta la Gran Final."],
+          ["4️⃣","El ranking se actualiza automáticamente cada vez que entra un resultado oficial."],
+          ["5️⃣","¡El participante con más puntos al finalizar el torneo el 19 de julio es el campeón!"],
+        ].map(([n,t])=>(
+          <div key={n} style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:8}}>
+            <span style={{fontSize:18,flexShrink:0}}>{n}</span>
+            <span style={{fontSize:13,color:"#b0bec5",lineHeight:1.6}}>{t}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{background:"#131d2e",borderRadius:12,padding:20,marginBottom:16,border:"1px solid #1a2f4a"}}>
+        <h3 style={{fontSize:15,fontWeight:700,color:"#f9a825",marginBottom:16,textTransform:"uppercase",letterSpacing:.5}}>⭐ Sistema de Puntuación por Fase</h3>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {puntos.map(p=>(
+            <div key={p.fase}>
+              <div style={{fontSize:11,fontWeight:700,color:"#546e7a",letterSpacing:1,textTransform:"uppercase",marginBottom:6,paddingBottom:4,borderBottom:"1px solid rgba(255,255,255,.05)"}}>{p.fase}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}}>
+                {p.items.map(([k,v,c])=>(
+                  <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",background:"rgba(255,255,255,.02)",borderRadius:6}}>
+                    <span style={{color:"#78909c",fontSize:12}}>{k}</span>
+                    <span style={{color:c,fontWeight:800,fontSize:13}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{background:"#131d2e",borderRadius:12,padding:20,border:"1px solid #1a2f4a"}}>
+        <h3 style={{fontSize:15,fontWeight:700,color:"#f9a825",marginBottom:14,textTransform:"uppercase",letterSpacing:.5}}>⚠️ Reglas Importantes</h3>
+        {[["🔒","Una vez presionado ENVIAR, los pronósticos quedan bloqueados definitivamente. No hay excepciones."],
+          ["📅","La Fase 1 debe enviarse ANTES del primer partido: México vs Sudáfrica, 11 Jun, 2:00 PM hora Colombia."],
+          ["⚽","En partidos de eliminatorias que terminen en empate, se debe pronosticar el resultado de penales. El ganador en penales avanza al bracket."],
+          ["📊","Los pronósticos de todos los participantes se hacen públicos 30 minutos antes del primer partido."],
+          ["🏆","La tabla de premiación en bonos digitales se anunciará antes del inicio del torneo, según participantes y patrocinadores confirmados."],
+          ["📧","Ante cualquier duda: mundialistagranpolla@gmail.com"],
+        ].map(([icon,text])=>(
+          <div key={text} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"8px 10px",background:"rgba(255,255,255,.02)",borderRadius:8,marginBottom:6}}>
+            <span style={{fontSize:18,flexShrink:0}}>{icon}</span>
+            <span style={{fontSize:13,color:"#90a4ae",lineHeight:1.6}}>{text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // ADMIN PAGE
 // ============================================================
 function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2}){
@@ -2022,6 +2279,213 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2}
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// COMPARATIVO PAGE
+// ============================================================
+function ComparativoPage({allProfiles, allPredictions, allSubmitted, results, currentUid}){
+  const [selGroup, setSelGroup] = useState("A");
+  const [now, setNow] = useState(new Date());
+
+  // First match: Mexico vs Sudafrica - Jun 11 2026 2:00 PM COL (UTC-5) = 19:00 UTC
+  const FIRST_MATCH = new Date("2026-06-11T19:00:00Z");
+  const PUBLISH_AT  = new Date(FIRST_MATCH.getTime() - 30 * 60 * 1000); // 30 min before
+  const isPublished = now >= PUBLISH_AT;
+  const msLeft = PUBLISH_AT - now;
+
+  useEffect(()=>{
+    if(isPublished) return;
+    const t = setInterval(()=>setNow(new Date()), 1000);
+    return ()=>clearInterval(t);
+  },[isPublished]);
+
+  // Format countdown
+  function formatCountdown(ms){
+    if(ms <= 0) return null;
+    const h = Math.floor(ms/3600000);
+    const m = Math.floor((ms%3600000)/60000);
+    const s = Math.floor((ms%60000)/1000);
+    const d = Math.floor(ms/86400000);
+    if(d > 0) return `${d}d ${String(h%24).padStart(2,"0")}h ${String(m).padStart(2,"0")}m`;
+    return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  }
+
+  // Only show players who submitted phase 1
+  const players = Object.entries(allProfiles)
+    .filter(([uid]) => allSubmitted[uid] === true)
+    .map(([uid, p]) => ({uid, name: p.name}))
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  const matches = GROUP_MATCHES.filter(m => m.group === selGroup);
+
+  function getCellStyle(pred, actual){
+    if(!actual || actual.home === "") return {};
+    if(!pred || pred.home === "") return {};
+    const pts = calcPoints(pred, actual, "groups");
+    const max = POINTS.groups.exactScore;
+    if(pts === max) return {background:"rgba(129,199,132,.18)", color:"#81c784"};
+    if(pts > 0)     return {background:"rgba(249,168,37,.12)", color:"#f9a825"};
+    return {background:"rgba(239,83,80,.08)", color:"#ef5350"};
+  }
+
+  // Not yet published — show countdown
+  if(!isPublished){
+    return(
+      <div style={S.section}>
+        <h2 style={S.sectionTitle}>📊 Comparativo de Pronósticos</h2>
+        <div style={{background:"rgba(21,101,192,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:16,padding:"40px 24px",textAlign:"center",marginTop:8}}>
+          <div style={{fontSize:52,marginBottom:12}}>🔒</div>
+          <h3 style={{fontSize:22,fontWeight:800,color:"#4fc3f7",marginBottom:10}}>
+            Pronósticos bloqueados hasta 30 min antes del inicio
+          </h3>
+          <p style={{color:"#90a4ae",fontSize:14,lineHeight:1.7,maxWidth:480,margin:"0 auto 24px"}}>
+            Los pronósticos de todos los participantes se publicarán automáticamente
+            <strong style={{color:"#fff"}}> 30 minutos antes del primer partido</strong>:<br/>
+            México vs Sudáfrica — Miércoles 11 de junio, 2:00 PM hora Colombia
+          </p>
+          <div style={{display:"inline-flex",gap:8,justifyContent:"center",marginBottom:16}}>
+            {formatCountdown(msLeft)?.split(":").length === 3 ?
+              formatCountdown(msLeft).split(":").map((v,i)=>(
+                <div key={i} style={{background:"rgba(0,0,0,.3)",borderRadius:10,padding:"12px 16px",minWidth:64,textAlign:"center"}}>
+                  <div style={{fontSize:32,fontWeight:900,color:"#f9a825",lineHeight:1}}>{v}</div>
+                  <div style={{fontSize:10,color:"#546e7a",letterSpacing:1,marginTop:4}}>{["HRS","MIN","SEG"][i]}</div>
+                </div>
+              )) : (
+                <div style={{fontSize:20,fontWeight:700,color:"#f9a825"}}>{formatCountdown(msLeft)}</div>
+              )
+            }
+          </div>
+          <div style={{fontSize:13,color:"#546e7a"}}>
+            Se publicarán los pronósticos de <strong style={{color:"#fff"}}>{players.length} participante{players.length!==1?"s":""}</strong> que ya enviaron su Fase 1
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return(
+    <div style={S.section}>
+      <h2 style={S.sectionTitle}>📊 Comparativo de Pronósticos</h2>
+      <p style={{color:"#546e7a",fontSize:13,marginBottom:16}}>
+        Pronósticos de los {players.length} participantes que enviaron su Fase 1.
+        <span style={{marginLeft:12,display:"inline-flex",gap:10,flexWrap:"wrap"}}>
+          <span style={{background:"rgba(129,199,132,.18)",color:"#81c784",padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:700}}>✓ Exacto</span>
+          <span style={{background:"rgba(249,168,37,.12)",color:"#f9a825",padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:700}}>~ Correcto</span>
+          <span style={{background:"rgba(239,83,80,.08)",color:"#ef5350",padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:700}}>✗ Incorrecto</span>
+        </span>
+      </p>
+
+      {/* Group selector */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+        {Object.keys(GROUPS).map(g=>(
+          <button key={g} onClick={()=>setSelGroup(g)}
+            style={{...S.groupTab,...(selGroup===g?S.groupTabActive:{})}}>
+            {g}
+          </button>
+        ))}
+      </div>
+
+      {players.length === 0 && (
+        <div style={S.card}>
+          <p style={{color:"#37474f",textAlign:"center",padding:"20px 0"}}>
+            Ningún participante ha enviado su Fase 1 aún.
+          </p>
+        </div>
+      )}
+
+      {players.length > 0 && (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:600}}>
+            <thead>
+              <tr style={{borderBottom:"2px solid #1a2f4a"}}>
+                <th style={{padding:"8px 10px",textAlign:"left",color:"#546e7a",fontWeight:700,fontSize:11,letterSpacing:.5,textTransform:"uppercase",minWidth:160,position:"sticky",left:0,background:"#131d2e",zIndex:2}}>
+                  Partido
+                </th>
+                <th style={{padding:"8px 10px",textAlign:"center",color:"#f9a825",fontWeight:700,fontSize:11,background:"#131d2e",whiteSpace:"nowrap"}}>
+                  ⚽ Real
+                </th>
+                {players.map(p=>(
+                  <th key={p.uid} style={{
+                    padding:"8px 8px",textAlign:"center",
+                    color: p.uid===currentUid?"#f9a825":"#90a4ae",
+                    fontWeight: p.uid===currentUid?800:600,
+                    fontSize:11,whiteSpace:"nowrap",minWidth:76,
+                    background: p.uid===currentUid?"rgba(249,168,37,.08)":"#131d2e",
+                  }}>
+                    {p.name.split(" ")[0]}
+                    {p.uid===currentUid&&<div style={{fontSize:9,color:"#f9a825"}}>▶ TÚ</div>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matches.map((m,i)=>{
+                const actual = results[m.id];
+                const hasResult = actual && actual.home !== "";
+                return(
+                  <tr key={m.id} style={{borderBottom:"1px solid rgba(255,255,255,.04)",background:i%2===0?"transparent":"rgba(255,255,255,.02)"}}>
+                    <td style={{padding:"7px 10px",fontWeight:600,color:"#cfd8dc",position:"sticky",left:0,background:i%2===0?"#0f1624":"#131d2e",zIndex:1,fontSize:11}}>
+                      {m.home} vs {m.away}
+                      {m.date&&<div style={{fontSize:9,color:"#546e7a",marginTop:1}}>📅 {m.date} {m.time&&`· ${m.time}`}</div>}
+                    </td>
+                    <td style={{padding:"7px 10px",textAlign:"center",fontWeight:800,
+                      color:hasResult?"#fff":"#37474f",
+                      background:hasResult?"rgba(255,255,255,.05)":"transparent",
+                      whiteSpace:"nowrap"}}>
+                      {hasResult?`${actual.home}–${actual.away}`:"—"}
+                    </td>
+                    {players.map(p=>{
+                      const pred = allPredictions[p.uid]?.[m.id];
+                      const hasPred = pred && pred.home!=="" && pred.away!=="";
+                      const cs = hasResult?getCellStyle(pred,actual):{};
+                      return(
+                        <td key={p.uid} style={{
+                          padding:"7px 6px",textAlign:"center",
+                          fontWeight:hasPred?700:400,
+                          color:cs.color||(hasPred?"#b0bec5":"#37474f"),
+                          background:cs.background||(p.uid===currentUid?"rgba(249,168,37,.04)":"transparent"),
+                          fontSize:12,whiteSpace:"nowrap",
+                        }}>
+                          {hasPred?`${pred.home}–${pred.away}`:"—"}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr style={{borderTop:"2px solid #1a2f4a",background:"rgba(255,255,255,.04)"}}>
+                <td style={{padding:"8px 10px",fontWeight:800,color:"#f9a825",fontSize:11,position:"sticky",left:0,background:"rgba(21,37,61,.95)"}}>
+                  PUNTOS GRUPO {selGroup}
+                </td>
+                <td></td>
+                {players.map(p=>{
+                  const preds=allPredictions[p.uid]||{};
+                  let pts=0;
+                  matches.forEach(m=>{
+                    const actual=results[m.id];
+                    const pred=preds[m.id];
+                    if(actual&&pred) pts+=calcPoints(pred,actual,"groups");
+                  });
+                  return(
+                    <td key={p.uid} style={{
+                      padding:"8px 6px",textAlign:"center",fontWeight:900,fontSize:14,
+                      color:p.uid===currentUid?"#f9a825":"#e0e0e0",
+                      background:p.uid===currentUid?"rgba(249,168,37,.1)":"transparent",
+                    }}>
+                      {pts>0?pts:"—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

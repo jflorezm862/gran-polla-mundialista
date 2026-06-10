@@ -1065,6 +1065,7 @@ export default function App(){
             allProfiles={allProfiles}
             allPredictions={allPredictions}
             allSubmitted={allSubmitted}
+            allScores={allScores}
             results={results}
             currentUid={fbUser?.uid}
           />
@@ -1102,7 +1103,8 @@ export default function App(){
         {/* ADMIN */}
         {page==="admin"&&isAdmin&&(
           <AdminPage results={results} saveResult={saveResult}
-            phase2Open={phase2Open} phase2Deadline={phase2Deadline} adminSetPhase2={adminSetPhase2}/>
+            phase2Open={phase2Open} phase2Deadline={phase2Deadline} adminSetPhase2={adminSetPhase2}
+            allScores={allScores}/>
         )}
       </main>
     </div>
@@ -1705,6 +1707,7 @@ function LivePage({results,refreshLive,liveStatus,saveResult,addNote}){
 }
 
 // ============================================================
+
 // ============================================================
 // SPONSORS PAGE
 // ============================================================
@@ -2143,10 +2146,11 @@ function ReglasPage(){
 // ============================================================
 // ADMIN PAGE
 // ============================================================
-function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2}){
+function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,allScores}){
   const [phase,setPhase]=useState("groups");
   const [selGrp,setSelGrp]=useState("A");
   const [deadlineInput,setDeadlineInput]=useState(phase2Deadline||"");
+  const [showRanking,setShowRanking]=useState(false);
 
   const phases=[
     {key:"groups",label:"Grupos"},{key:"round32",label:"Ronda 32"},
@@ -2200,6 +2204,28 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2}
         )}
       </div>
 
+      {/* Ranking preview */}
+      <div style={{...S.card,marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <h3 style={S.cardTitle}>🏆 Ranking Actual ({allScores.length} participantes)</h3>
+          <button style={{...S.tab,fontSize:11}} onClick={()=>setShowRanking(s=>!s)}>
+            {showRanking?"Ocultar":"Ver ranking"}
+          </button>
+        </div>
+        {showRanking&&(
+          <div style={{marginTop:10}}>
+            {allScores.map((r,i)=>(
+              <div key={r.uid} style={{display:"flex",alignItems:"center",padding:"8px 10px",borderBottom:"1px solid rgba(255,255,255,.04)",borderRadius:6}}>
+                <span style={{width:36,textAlign:"center",fontSize:18}}>{["🥇","🥈","🥉"][i]||`#${i+1}`}</span>
+                <span style={{flex:1,fontSize:13,color:"#cfd8dc"}}>{r.name}</span>
+                <span style={{fontWeight:800,fontSize:16,color:"#f9a825"}}>{r.score} pts</span>
+              </div>
+            ))}
+            {allScores.length===0&&<p style={{color:"#37474f",fontSize:13}}>Sin participantes aún.</p>}
+          </div>
+        )}
+      </div>
+
       {/* Results entry */}
       <div style={S.tabRow}>
         {phases.map(p=>(
@@ -2242,13 +2268,13 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2}
 // ============================================================
 // COMPARATIVO PAGE
 // ============================================================
-function ComparativoPage({allProfiles, allPredictions, allSubmitted, results, currentUid}){
+function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, results, currentUid}){
   const [selGroup, setSelGroup] = useState("A");
   const [now, setNow] = useState(new Date());
 
   // First match: Mexico vs Sudafrica - Jun 11 2026 2:00 PM COL (UTC-5) = 19:00 UTC
   const FIRST_MATCH = new Date("2026-06-11T19:00:00Z");
-  const PUBLISH_AT  = new Date(FIRST_MATCH.getTime() - 30 * 60 * 1000); // 30 min before
+  const PUBLISH_AT  = new Date(FIRST_MATCH.getTime() - 30 * 60 * 1000);
   const isPublished = now >= PUBLISH_AT;
   const msLeft = PUBLISH_AT - now;
 
@@ -2258,7 +2284,6 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, results, cu
     return ()=>clearInterval(t);
   },[isPublished]);
 
-  // Format countdown
   function formatCountdown(ms){
     if(ms <= 0) return null;
     const h = Math.floor(ms/3600000);
@@ -2268,6 +2293,10 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, results, cu
     if(d > 0) return `${d}d ${String(h%24).padStart(2,"0")}h ${String(m).padStart(2,"0")}m`;
     return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
   }
+
+  // Count submitted — use allSubmitted if loaded, else fallback to allScores length
+  const submittedCount = Object.values(allSubmitted).filter(v=>v===true).length || 0;
+  const displayCount = submittedCount > 0 ? submittedCount : allScores.length;
 
   // Only show players who submitted phase 1
   const players = Object.entries(allProfiles)
@@ -2315,7 +2344,7 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, results, cu
             }
           </div>
           <div style={{fontSize:13,color:"#546e7a"}}>
-            Se publicarán los pronósticos de <strong style={{color:"#fff"}}>{players.length} participante{players.length!==1?"s":""}</strong> que ya enviaron su Fase 1
+            Se publicarán los pronósticos de <strong style={{color:"#fff"}}>{displayCount} participante{displayCount!==1?"s":""}</strong> que ya enviaron su Fase 1
           </div>
         </div>
       </div>
@@ -2487,4 +2516,3 @@ const S={
   groupSummaryCard:{background:"rgba(255,255,255,.02)",border:"1px solid #1a2f4a",borderRadius:10,padding:12},
   championCard:{background:"linear-gradient(135deg,#1a2f00,#2e5800)",border:"2px solid #f9a825",borderRadius:16,padding:"40px 24px",textAlign:"center",marginTop:20,animation:"glow 2s infinite"},
 };
-// refresh Tue Jun  9 20:40:20 -05 2026

@@ -1705,50 +1705,6 @@ function LivePage({results,refreshLive,liveStatus,saveResult,addNote}){
 }
 
 // ============================================================
-// ADMIN PAGE
-// ============================================================
-function AdminPage({results,saveResult}){
-  const [phase,setPhase]=useState("groups");
-  const [selGrp,setSelGrp]=useState("A");
-  const phases=[{key:"groups",label:"Grupos"},{key:"round32",label:"Ronda 32"},{key:"round16",label:"Octavos"},{key:"quarters",label:"Cuartos"},{key:"semis",label:"Semis"},{key:"third",label:"3er Lugar"},{key:"final",label:"Final"}];
-  const matches=phase==="groups"?GROUP_MATCHES.filter(m=>m.group===selGrp):KNOCKOUT_ROUNDS.filter(m=>m.phase===phase);
-  return(
-    <div style={S.section}>
-      <h2 style={S.sectionTitle}>⚙️ Panel Admin</h2>
-      <div style={S.tabRow}>
-        {phases.map(p=><button key={p.key} onClick={()=>setPhase(p.key)} style={{...S.tab,...(phase===p.key?S.tabActive:{})}}>{p.label}</button>)}
-      </div>
-      {phase==="groups"&&(
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-          {Object.keys(GROUPS).map(g=><button key={g} onClick={()=>setSelGrp(g)} style={{...S.groupTab,...(selGrp===g?S.groupTabActive:{})}}>{g}</button>)}
-        </div>
-      )}
-      <div style={S.card}>
-        {matches.map(m=>{
-          const res=results[m.id];
-          const [h,setH]=useState(res?.home??"");
-          const [a,setA]=useState(res?.away??"");
-          const saved=res&&res.home!=="";
-          const label=m.label||(m.home&&m.away?`${m.home} vs ${m.away}`:"");
-          return(
-            <div key={m.id} style={{...S.matchRow,...(saved?{borderLeft:"3px solid #81c784",paddingLeft:10}:{})}}>
-              <span style={{flex:1,fontSize:14,fontWeight:600,color:"#cfd8dc",minWidth:140}}>{label}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} placeholder="—"/>
-                <span style={{color:"#f9a825",fontWeight:900,fontSize:22}}>:</span>
-                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} placeholder="—"/>
-                <button style={{background:"#1b5e20",border:"none",borderRadius:6,padding:"7px 14px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}
-                  onClick={()=>{if(h!==""&&a!=="")saveResult(m.id,h,a);}}>✓ Guardar</button>
-              </div>
-              {saved&&<span style={{color:"#81c784",fontSize:12}}>✓ {res.home}–{res.away}</span>}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ============================================================
 // SPONSORS PAGE
 // ============================================================

@@ -2531,3 +2531,4 @@ const S={
   groupSummaryCard:{background:"rgba(255,255,255,.02)",border:"1px solid #1a2f4a",borderRadius:10,padding:12},
   championCard:{background:"linear-gradient(135deg,#1a2f00,#2e5800)",border:"2px solid #f9a825",borderRadius:16,padding:"40px 24px",textAlign:"center",marginTop:20,animation:"glow 2s infinite"},
 };
+// refresh Tue Jun  9 20:40:20 -05 2026

@@ -2155,9 +2155,9 @@ function AdminMatchRow({m,results,saveResult}){
   const saved=res&&res.home!=="";
   const label=m.label||(m.home&&m.away?`${m.home} vs ${m.away}`:"");
   useEffect(()=>{
-    if(res?.home!==undefined) setH(res.home);
-    if(res?.away!==undefined) setA(res.away);
-  },[res?.home,res?.away]);
+    setH(res?.home??"");
+    setA(res?.away??"");
+  },[m.id,res?.home,res?.away]);
   return(
     <div style={{...S.matchRow,...(saved?{borderLeft:"3px solid #81c784",paddingLeft:10}:{})}}>
       <span style={{flex:1,fontSize:14,fontWeight:600,color:"#cfd8dc",minWidth:140}}>{label}</span>

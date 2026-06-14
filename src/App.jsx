@@ -2144,6 +2144,33 @@ function ReglasPage(){
 }
 
 // ============================================================
+
+// ============================================================
+// ADMIN MATCH ROW
+// ============================================================
+function AdminMatchRow({m,results,saveResult}){
+  const res=results[m.id];
+  const [h,setH]=useState(res?.home??"");
+  const [a,setA]=useState(res?.away??"");
+  const saved=res&&res.home!=="";
+  const label=m.label||(m.home&&m.away?`${m.home} vs ${m.away}`:"");
+  useEffect(()=>{
+    if(res?.home!==undefined) setH(res.home);
+    if(res?.away!==undefined) setA(res.away);
+  },[res?.home,res?.away]);
+  return(
+    <div style={{...S.matchRow,...(saved?{borderLeft:"3px solid #81c784",paddingLeft:10}:{})}}>
+      <span style={{flex:1,fontSize:14,fontWeight:600,color:"#cfd8dc",minWidth:140}}>{label}</span>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} placeholder="—"/>
+        <span style={{color:"#f9a825",fontWeight:900,fontSize:22}}>:</span>
+        <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} placeholder="—"/>
+        <button style={{background:"#1b5e20",border:"none",borderRadius:6,padding:"7px 14px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"}} onClick={()=>{if(h!==""&&a!=="")saveResult(m.id,h,a);}}>✓ Guardar</button>
+      </div>
+      {saved&&<span style={{color:"#81c784",fontSize:12}}>✓ {res.home}–{res.away}</span>}
+    </div>
+  );
+}
 // ADMIN PAGE
 // ============================================================
 function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,allScores,allProfiles,allSubmitted}){
@@ -2293,26 +2320,7 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,
         </div>
       )}
       <div style={S.card}>
-        {matches.map(m=>{
-          const res=results[m.id];
-          const [h,setH]=useState(res?.home??"");
-          const [a,setA]=useState(res?.away??"");
-          const saved=res&&res.home!=="";
-          const label=m.label||(m.home&&m.away?`${m.home} vs ${m.away}`:"");
-          return(
-            <div key={m.id} style={{...S.matchRow,...(saved?{borderLeft:"3px solid #81c784",paddingLeft:10}:{})}}>
-              <span style={{flex:1,fontSize:14,fontWeight:600,color:"#cfd8dc",minWidth:140}}>{label}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} placeholder="—"/>
-                <span style={{color:"#f9a825",fontWeight:900,fontSize:22}}>:</span>
-                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} placeholder="—"/>
-                <button style={{background:"#1b5e20",border:"none",borderRadius:6,padding:"7px 14px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}
-                  onClick={()=>{if(h!==""&&a!=="")saveResult(m.id,h,a);}}>✓ Guardar</button>
-              </div>
-              {saved&&<span style={{color:"#81c784",fontSize:12}}>✓ {res.home}–{res.away}</span>}
-            </div>
-          );
-        })}
+        {matches.map(m=>(<AdminMatchRow key={m.id} m={m} results={results} saveResult={saveResult}/>))}
       </div>
     </div>
   );

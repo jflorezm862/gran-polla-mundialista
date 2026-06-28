@@ -10,6 +10,8 @@ import {
   collection, getDocs, updateDoc, serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // ============================================================
 // DATA – Copa del Mundo 2026
@@ -138,6 +140,9 @@ const KNOCKOUT_ROUNDS=[
 
 const ALL_MATCHES=[...GROUP_MATCHES,...KNOCKOUT_ROUNDS];
 
+// Fecha/hora límite: kickoff de México vs Sudáfrica (Jue 11 Jun 2026, 2:00 PM hora Colombia = UTC-5)
+const ELIMINATION_DEADLINE = new Date("2026-06-11T14:00:00-05:00");
+
 const POINTS={
   groups:{exactScore:3,correctResult:1},
   round32:{exactScore:4,correctResult:2},
@@ -158,6 +163,101 @@ function calcPoints(pred,actual,phase){
   if(pH===aH&&pA===aA) return pts.exactScore;
   if(getResultWinner(pH,pA)===getResultWinner(aH,aA)) return pts.correctResult;
   return 0;
+}
+
+// ── Helper: convierte la fecha actual al formato usado en GROUP_MATCHES ("Jue 11 Jun") ──
+const DOW_ES=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+const MON_ES=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+function todayMatchDateLabel(){
+  const d=new Date();
+  return `${DOW_ES[d.getDay()]} ${d.getDate()} ${MON_ES[d.getMonth()]}`;
+}
+function todayLongLabel(){
+  const d=new Date();
+  return d.toLocaleDateString("es-CO",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+}
+
+// ── Genera y descarga el PDF: Ranking + calendario de partidos de hoy ──
+function downloadRankingPDF(allScores, results){
+  const docPdf=new jsPDF({orientation:"portrait",unit:"pt",format:"a4"});
+  const pageWidth=docPdf.internal.pageSize.getWidth();
+  const todayLabel=todayMatchDateLabel();
+  const todayLong=todayLongLabel();
+
+  // Header
+  docPdf.setFillColor(8,12,22);
+  docPdf.rect(0,0,pageWidth,70,"F");
+  docPdf.setTextColor(249,168,37);
+  docPdf.setFont("helvetica","bold");
+  docPdf.setFontSize(18);
+  docPdf.text("GRAN POLLA MUNDIALISTA 2026", pageWidth/2, 30, {align:"center"});
+  docPdf.setTextColor(255,255,255);
+  docPdf.setFontSize(11);
+  docPdf.setFont("helvetica","normal");
+  docPdf.text(`Ranking del día — ${todayLong}`, pageWidth/2, 50, {align:"center"});
+
+  // Tabla de Ranking
+  const rankingRows = allScores
+    .filter(s=>!s.isAdmin)
+    .map((s,i)=>[
+      s.eliminated ? "❌" : `${i+1}`,
+      s.eliminated ? `${s.name} (ELIMINADO)` : s.name,
+      s.eliminated ? "0" : `${s.score}`,
+    ]);
+
+  autoTable(docPdf, {
+    startY:90,
+    head:[["POS","JUGADOR","PUNTOS"]],
+    body:rankingRows,
+    theme:"grid",
+    headStyles:{fillColor:[21,37,61],textColor:[249,168,37],fontStyle:"bold"},
+    bodyStyles:{textColor:[40,40,40],fontSize:10},
+    alternateRowStyles:{fillColor:[245,245,245]},
+    columnStyles:{0:{halign:"center",cellWidth:50},2:{halign:"center",cellWidth:80}},
+    margin:{left:40,right:40},
+  });
+
+  // Calendario de partidos de HOY
+  let cursorY = docPdf.lastAutoTable.finalY + 30;
+  docPdf.setTextColor(21,37,61);
+  docPdf.setFont("helvetica","bold");
+  docPdf.setFontSize(13);
+  docPdf.text(`⚽ Partidos de hoy (${todayLabel})`, 40, cursorY);
+  cursorY += 10;
+
+  const todaysMatches = GROUP_MATCHES.filter(m=>m.date===todayLabel);
+
+  if(todaysMatches.length===0){
+    docPdf.setFont("helvetica","normal");
+    docPdf.setFontSize(11);
+    docPdf.setTextColor(100,100,100);
+    docPdf.text("No hay partidos programados para el día de hoy.", 40, cursorY+20);
+  } else {
+    const matchRows = todaysMatches.map(m=>{
+      const r = results[m.id];
+      const score = (r&&r.home!==""&&r.away!=="") ? `${r.home}–${r.away}` : "—";
+      return [m.group, `${m.home} vs ${m.away}`, m.time, m.city, score];
+    });
+    autoTable(docPdf, {
+      startY:cursorY+10,
+      head:[["GRUPO","PARTIDO","HORA (COL)","SEDE","RESULTADO"]],
+      body:matchRows,
+      theme:"grid",
+      headStyles:{fillColor:[21,37,61],textColor:[249,168,37],fontStyle:"bold"},
+      bodyStyles:{textColor:[40,40,40],fontSize:10},
+      alternateRowStyles:{fillColor:[245,245,245]},
+      margin:{left:40,right:40},
+    });
+  }
+
+  // Footer
+  const pageHeight=docPdf.internal.pageSize.getHeight();
+  docPdf.setFontSize(8);
+  docPdf.setTextColor(150,150,150);
+  docPdf.text(`Generado el ${new Date().toLocaleString("es-CO")}`, 40, pageHeight-20);
+
+  const fileDate = new Date().toISOString().slice(0,10);
+  docPdf.save(`ranking-gran-polla-${fileDate}.pdf`);
 }
 
 // ============================================================
@@ -249,88 +349,61 @@ function findAnnexC(best8Groups){
   return null;
 }
 
+
+// ============================================================
+// RESULTADOS REALES — Fase de Grupos Mundial 2026
+// Clasificados confirmados al cierre de grupos (27 jun 2026)
+// ============================================================
+const REAL_CLASSIFIED = {
+  A: ["México","Sudáfrica"],
+  B: ["Suiza","Canadá"],
+  C: ["Brasil","Marruecos"],
+  D: ["Estados Unidos","Australia"],
+  E: ["Alemania","Costa de Marfil"],
+  F: ["Países Bajos","Japón"],
+  G: ["Bélgica","Egipto"],
+  H: ["España","Cabo Verde"],
+  I: ["Francia","Noruega"],
+  J: ["Argentina","Austria"],
+  K: ["Colombia","RD Congo"],
+  L: ["Inglaterra","Ghana"],
+};
+
+// 8 mejores terceros clasificados (grupos B,D,E,F,I,J,K,L)
+// Mapeados al cruce real confirmado FIFA
+const REAL_R32 = [
+  {id:"R32_1",  home:"Sudáfrica",      away:"Canadá",             date:"Dom 28 Jun", city:"Los Ángeles"},
+  {id:"R32_2",  home:"Alemania",       away:"Paraguay",           date:"Lun 29 Jun", city:"Boston"},
+  {id:"R32_3",  home:"Países Bajos",   away:"Marruecos",          date:"Mié 1 Jul",  city:"Dallas"},
+  {id:"R32_4",  home:"Brasil",         away:"Japón",              date:"Lun 29 Jun", city:"Houston"},
+  {id:"R32_5",  home:"Costa de Marfil",away:"Noruega",            date:"Mar 30 Jun", city:"Dallas"},
+  {id:"R32_6",  home:"Francia",        away:"Suecia",             date:"Mar 30 Jun", city:"East Rutherford"},
+  {id:"R32_7",  home:"México",         away:"Ecuador",            date:"Mar 30 Jun", city:"Ciudad de México"},
+  {id:"R32_8",  home:"Inglaterra",     away:"RD Congo",           date:"Mié 1 Jul",  city:"Atlanta"},
+  {id:"R32_9",  home:"Bélgica",        away:"Senegal",            date:"Mié 1 Jul",  city:"Seattle"},
+  {id:"R32_10", home:"Estados Unidos", away:"Bosnia H.",          date:"Mié 1 Jul",  city:"Santa Clara"},
+  {id:"R32_11", home:"España",         away:"Austria",            date:"Jue 2 Jul",  city:"Los Ángeles"},
+  {id:"R32_12", home:"RD Congo",       away:"Ghana",              date:"Jue 2 Jul",  city:"Toronto"},
+  {id:"R32_13", home:"Suiza",          away:"Argelia",            date:"Jue 2 Jul",  city:"Vancouver"},
+  {id:"R32_14", home:"Australia",      away:"Egipto",             date:"Vie 3 Jul",  city:"Dallas"},
+  {id:"R32_15", home:"Argentina",      away:"Cabo Verde",         date:"Vie 3 Jul",  city:"Miami"},
+  {id:"R32_16", home:"Colombia",       away:"Ghana",              date:"Vie 3 Jul",  city:"Kansas City"},
+];
+
 // Construye el bracket completo personalizado basado en pronósticos del usuario
 function buildPersonalBracket(preds){
   const bracket = {};
 
-  // 1. Calcular clasificados por grupo
-  const classified = {};
-  Object.keys(GROUPS).forEach(g=>{
-    const standings = calcGroupStandings(g, preds);
-    classified[g] = standings.map(s=>s.team);
-  });
+  // 1. CLASIFICADOS REALES — resultados oficiales fase de grupos
+  // Los cruces de Ronda de 32 usan los equipos reales, no pronósticos del usuario
+  const classified = REAL_CLASSIFIED;
 
-  // 2. Calcular mejores terceros (top 8)
-  const thirdsData = Object.keys(GROUPS).map(g=>{
-    const st = calcGroupStandings(g, preds);
-    return { group:g, team:classified[g]?.[2]||`3°${g}`, pts:st[2]?.PTS||0, dg:st[2]?.DG||0, gf:st[2]?.GF||0 };
-  }).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
-
-  const best8 = thirdsData.slice(0,8);
-  const best8Groups = best8.map(t=>t.group); // ej: ["E","F","G","H","I","J","K","L"]
-  const t3byGroup = {}; // { "E": "Alemania", "F": "Japón", ... }
-  best8.forEach(t=>{ t3byGroup[t.group]=t.team; });
-
-  // 3. Aplicar tabla FIFA Annex C
-  const annexRow = findAnnexC(best8Groups);
-
-  // Si no encontramos fila exacta (ej. pocos pronósticos), usamos fallback
-  // annexRow[8..15] = [vs1A, vs1B, vs1D, vs1E, vs1G, vs1I, vs1K, vs1L]
-  const get3rd = (groupCode) => {
-    if(!groupCode) return "3°?";
-    return t3byGroup[groupCode] || `3°${groupCode}`;
-  };
-
-  // Mapeo de posición en annexRow a qué ganador enfrenta
-  // Columnas: [vs1A(8), vs1B(9), vs1D(10), vs1E(11), vs1G(12), vs1I(13), vs1K(14), vs1L(15)]
-  const vs1A = annexRow ? get3rd(annexRow[8])  : best8[0]?.team||"3°?";
-  const vs1B = annexRow ? get3rd(annexRow[9])  : best8[1]?.team||"3°?";
-  const vs1D = annexRow ? get3rd(annexRow[10]) : best8[2]?.team||"3°?";
-  const vs1E = annexRow ? get3rd(annexRow[11]) : best8[3]?.team||"3°?";
-  const vs1G = annexRow ? get3rd(annexRow[12]) : best8[4]?.team||"3°?";
-  const vs1I = annexRow ? get3rd(annexRow[13]) : best8[5]?.team||"3°?";
-  const vs1K = annexRow ? get3rd(annexRow[14]) : best8[6]?.team||"3°?";
-  const vs1L = annexRow ? get3rd(annexRow[15]) : best8[7]?.team||"3°?";
-
-  // Helpers
+  // Helpers (mantienen compatibilidad con el resto del bracket)
   const w1 = g => classified[g]?.[0]||`1°${g}`;
   const w2 = g => classified[g]?.[1]||`2°${g}`;
 
-  // 4. RONDA DE 32 — fixture oficial FIFA con terceros según Annex C
-  // Match 73: 2°A vs 2°B
-  // Match 74: 1°E vs mejor 3° (A/B/C/D/F) → vs1E
-  // Match 75: 1°F vs 2°C
-  // Match 76: 1°C vs 2°F
-  // Match 77: 1°I vs mejor 3° (C/D/F/G/H) → vs1I
-  // Match 78: 2°E vs 2°I
-  // Match 79: 1°A vs mejor 3° (C/E/F/H/I) → vs1A
-  // Match 80: 1°L vs mejor 3° (E/H/I/J/K) → vs1L
-  // Match 81: 1°D vs mejor 3° (B/E/F/I/J) → vs1D
-  // Match 82: 1°G vs mejor 3° (A/E/H/I/J) → vs1G
-  // Match 83: 2°K vs 2°L
-  // Match 84: 1°H vs 2°J
-  // Match 85: 1°B vs mejor 3° (E/F/G/I/J) → vs1B
-  // Match 86: 1°J vs 2°H
-  // Match 87: 1°K vs mejor 3° (D/E/I/J/L) → vs1K
-  // Match 88: 2°D vs 2°G
-  const r32 = [
-    {id:"R32_1",  home:w2("A"),  away:w2("B"),  date:"Dom 28 Jun", city:"Inglewood"},
-    {id:"R32_2",  home:w1("E"),  away:vs1E,      date:"Lun 29 Jun", city:"Foxborough"},
-    {id:"R32_3",  home:w1("F"),  away:w2("C"),   date:"Lun 29 Jun", city:"Monterrey"},
-    {id:"R32_4",  home:w1("C"),  away:w2("F"),   date:"Lun 29 Jun", city:"Houston"},
-    {id:"R32_5",  home:w2("E"),  away:w2("I"),   date:"Mar 30 Jun", city:"Arlington"},
-    {id:"R32_6",  home:w1("I"),  away:vs1I,      date:"Mar 30 Jun", city:"East Rutherford"},
-    {id:"R32_7",  home:w1("A"),  away:vs1A,      date:"Mar 30 Jun", city:"Ciudad de México"},
-    {id:"R32_8",  home:w1("L"),  away:vs1L,      date:"Mié 1 Jul",  city:"Atlanta"},
-    {id:"R32_9",  home:w1("G"),  away:vs1G,      date:"Mié 1 Jul",  city:"Seattle"},
-    {id:"R32_10", home:w1("D"),  away:vs1D,      date:"Mié 1 Jul",  city:"Santa Clara"},
-    {id:"R32_11", home:w1("H"),  away:w2("J"),   date:"Jue 2 Jul",  city:"Inglewood"},
-    {id:"R32_12", home:w2("K"),  away:w2("L"),   date:"Jue 2 Jul",  city:"Toronto"},
-    {id:"R32_13", home:w1("B"),  away:vs1B,      date:"Jue 2 Jul",  city:"Vancouver"},
-    {id:"R32_14", home:w2("D"),  away:w2("G"),   date:"Vie 3 Jul",  city:"Arlington"},
-    {id:"R32_15", home:w1("J"),  away:w2("H"),   date:"Vie 3 Jul",  city:"Miami Gardens"},
-    {id:"R32_16", home:w1("K"),  away:vs1K,      date:"Vie 3 Jul",  city:"Kansas City"},
-  ];
+  // 4. RONDA DE 32 — Cruces reales confirmados FIFA (cierre grupos 27 jun 2026)
+  const r32 = REAL_R32;
 
   r32.forEach(m=>{
     bracket[m.id]={home:m.home,away:m.away,date:m.date,city:m.city,phase:"round32",label:`${m.home} vs ${m.away}`};
@@ -447,16 +520,30 @@ ${matchList}
 Responde ÚNICAMENTE con un JSON válido, sin texto extra, sin backticks:
 {"results":[{"id":"GA01","home":2,"away":1,"played":true},{"id":"GB12","home":0,"away":0,"played":false}],"lastUpdated":"2026-06-11T14:30:00Z","source":"nombre de la fuente"}
 Si no se ha jugado pon played:false.`;
+  const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
+  if(!apiKey) throw new Error("Falta VITE_ANTHROPIC_KEY en variables de entorno");
+
   const response=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-api-key": apiKey,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true",
+    },
     body:JSON.stringify({
-      model:"claude-sonnet-4-20250514",max_tokens:1200,
+      model:"claude-sonnet-4-6",max_tokens:1200,
       tools:[{type:"web_search_20250305",name:"web_search"}],
       messages:[{role:"user",content:prompt}]
     })
   });
+  if(!response.ok){
+    const err=await response.json().catch(()=>({}));
+    throw new Error(`API error ${response.status}: ${err?.error?.message||response.statusText}`);
+  }
   const data=await response.json();
   const text=data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+  if(!text) throw new Error("Respuesta vacía de la API");
   return JSON.parse(text.replace(/```json|```/g,"").trim());
 }
 
@@ -701,32 +788,44 @@ export default function App(){
   },[]);
 
   // ── Load all predictions for ranking + comparativo ───────
+  // Se re-ejecuta cuando cambian los perfiles O los resultados
   useEffect(()=>{
     if(!Object.keys(allProfiles).length) return;
     const fetchScores=async()=>{
       const scores=[];
       const allPreds={};
-      const submitted={};
+      const submittedMap={};
       for(const [uid,prof] of Object.entries(allProfiles)){
         const snap=await getDoc(doc(db,"predictions",uid));
-        const preds=snap.exists()?(snap.data().matches||{}):{};
+        const data=snap.exists()?snap.data():{};
+        const preds=data.matches||{};
         allPreds[uid]=preds;
-        submitted[uid]=snap.exists()?(snap.data().submitted===true):false;
+        submittedMap[uid]=data.submitted===true;
+
+        // ── Eliminación: no envió Fase 1, o la envió después del kickoff de México vs Sudáfrica ──
+        const submittedAtMs = data.submittedAt?.toMillis ? data.submittedAt.toMillis() : null;
+        const sentOnTime = data.submitted===true && submittedAtMs!==null && submittedAtMs <= ELIMINATION_DEADLINE.getTime();
+        const eliminated = !prof.isAdmin && !sentOnTime;
+
         let total=0;
         ALL_MATCHES.forEach(m=>{
           const actual=results[m.id];
           const pred=preds[m.id];
-          if(actual&&pred) total+=calcPoints(pred,actual,m.phase);
+          if(actual&&actual.home!==""&&actual.away!==""&&pred){
+            total+=calcPoints(pred,actual,m.phase);
+          }
         });
-        scores.push({uid,name:prof.name,score:total,isAdmin:prof.isAdmin});
+        if(eliminated) total=0;
+        scores.push({uid,name:prof.name,score:total,isAdmin:prof.isAdmin,eliminated});
       }
-      scores.sort((a,b)=>b.score-a.score);
+      scores.sort((a,b)=> (a.eliminated===b.eliminated) ? b.score-a.score : (a.eliminated?1:-1));
       setAllScores(scores);
       setAllPredictions(allPreds);
-      setAllSubmitted(submitted);
+      setAllSubmitted(submittedMap);
     };
     fetchScores();
-  },[allProfiles,results]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[allProfiles, results]);
 
   // ── Notifications on new results ─────────────────────────
   useEffect(()=>{
@@ -762,7 +861,8 @@ export default function App(){
         setLiveStatus({loading:false,lastUpdated:data.lastUpdated||new Date().toISOString(),source:data.source||"Web",updated,error:null});
       }
     }catch(e){
-      setLiveStatus(s=>({...s,loading:false,error:"Sin conexión — reintentando..."}));
+      console.error("fetchLiveResults error:", e.message);
+      setLiveStatus(s=>({...s,loading:false,error:e.message||"Error al conectar"}));
     }
   },[results]);
 
@@ -1074,22 +1174,100 @@ export default function App(){
         {/* RANKING */}
         {page==="ranking"&&(
           <div style={S.section}>
-            <h2 style={S.sectionTitle}>🏆 Ranking en Tiempo Real</h2>
-            {allScores.length===0&&<p style={{color:"#37474f"}}>Sin participantes aún.</p>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:22,borderBottom:"1px solid #1a2f4a",paddingBottom:10}}>
+              <h2 style={{...S.sectionTitle,marginBottom:0,borderBottom:"none",paddingBottom:0}}>🏆 Ranking en Tiempo Real</h2>
+              <button
+                style={{background:"linear-gradient(135deg,#1565c0,#1e88e5)",color:"#fff",border:"none",borderRadius:8,padding:"9px 18px",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit",display:"flex",alignItems:"center",gap:7}}
+                onClick={()=>downloadRankingPDF(allScores, results)}>
+                📄 Descargar PDF del día
+              </button>
+            </div>
+
+            {/* DEBUG — quitar después de verificar */}
+            <div style={{background:"rgba(0,0,0,.4)",border:"1px solid #37474f",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:11,fontFamily:"monospace",color:"#90a4ae"}}>
+              <div>👥 allScores.length: <strong style={{color:"#f9a825"}}>{allScores.length}</strong></div>
+              <div>⚽ results en Firebase: <strong style={{color:"#f9a825"}}>{Object.keys(results).length}</strong> docs</div>
+              <div>📊 partidos con resultado: <strong style={{color:"#f9a825"}}>{totalPlayed}</strong></div>
+              <div>🔑 API Key cargada: <strong style={{color:import.meta.env.VITE_ANTHROPIC_KEY?"#81c784":"#ef5350"}}>{import.meta.env.VITE_ANTHROPIC_KEY?"✅ Sí":"❌ No"}</strong></div>
+              <div>👤 Usuarios: {allScores.map(s=>`${s.name}(admin:${s.isAdmin},pts:${s.score}${s.eliminated?",ELIMINADO":""})`).join(" | ")}</div>
+            </div>
+
+            {allScores.length===0&&<p style={{color:"#546e7a",padding:"20px 0"}}>Sin participantes aún o cargando...</p>}
+
+            {/* Resumen de partidos jugados */}
+            <div style={{background:"rgba(249,168,37,.08)",border:"1px solid rgba(249,168,37,.2)",borderRadius:10,padding:"12px 20px",marginBottom:16,display:"flex",gap:24,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:13,color:"#f9a825",fontWeight:700}}>⚽ Partidos con resultado: <strong style={{color:"#fff"}}>{totalPlayed}</strong></span>
+              <span style={{fontSize:13,color:"#4fc3f7",fontWeight:700}}>👥 Participantes: <strong style={{color:"#fff"}}>{allScores.length}</strong></span>
+              <span style={{fontSize:12,color:"#546e7a"}}>Se actualiza automáticamente con cada resultado</span>
+            </div>
+
             <div style={{background:"#131d2e",borderRadius:12,overflow:"hidden",border:"1px solid #1a2f4a"}}>
-              <div style={{display:"flex",padding:"10px 20px",background:"rgba(255,255,255,.04)",fontSize:11,fontWeight:700,color:"#546e7a",letterSpacing:1.5,textTransform:"uppercase",borderBottom:"2px solid rgba(255,255,255,.06)"}}>
-                <span style={{width:60,textAlign:"center"}}>POS</span><span style={{flex:1}}>JUGADOR</span><span style={{width:100,textAlign:"right"}}>PUNTOS</span>
+              {/* Header tabla */}
+              <div style={{display:"grid",gridTemplateColumns:"60px 1fr 80px 80px 80px 100px",padding:"10px 20px",background:"rgba(255,255,255,.04)",fontSize:11,fontWeight:700,color:"#546e7a",letterSpacing:1.5,textTransform:"uppercase",borderBottom:"2px solid rgba(255,255,255,.06)",gap:8}}>
+                <span style={{textAlign:"center"}}>POS</span>
+                <span>JUGADOR</span>
+                <span style={{textAlign:"center"}}>✅ EXACTO</span>
+                <span style={{textAlign:"center"}}>👍 TENDENCIA</span>
+                <span style={{textAlign:"center"}}>🎯 ACIERTOS</span>
+                <span style={{textAlign:"right"}}>PUNTOS</span>
               </div>
-              {allScores.map((r,i)=>(
-                <div key={r.uid} style={{display:"flex",alignItems:"center",padding:"14px 20px",borderBottom:"1px solid rgba(255,255,255,.04)",background:r.uid===fbUser?.uid?"rgba(249,168,37,.07)":"transparent",borderLeft:r.uid===fbUser?.uid?"3px solid #f9a825":"3px solid transparent"}}>
-                  <span style={{width:60,textAlign:"center",fontSize:24}}>{["🥇","🥈","🥉"][i]||`#${i+1}`}</span>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:i<3?800:500,fontSize:16}}>{r.name}</div>
-                    {r.uid===fbUser?.uid&&<div style={{fontSize:10,color:"#f9a825",letterSpacing:1}}>▶ TÚ</div>}
+
+              {allScores.map((r,i)=>{
+                const preds = allPredictions[r.uid]||{};
+                let exactos=0, tendencia=0;
+                ALL_MATCHES.forEach(m=>{
+                  const actual=results[m.id];
+                  const pred=preds[m.id];
+                  if(!actual||actual.home===""||actual.away===""||!pred) return;
+                  const pts=calcPoints(pred,actual,m.phase);
+                  const ph=POINTS[m.phase]||POINTS.groups;
+                  if(pts===ph.exactScore) exactos++;
+                  else if(pts===ph.correctResult) tendencia++;
+                });
+                const totalAciertos=exactos+tendencia;
+                const isMe=r.uid===fbUser?.uid;
+                const medals=["🥇","🥈","🥉"];
+                const isElim = r.eliminated;
+                return(
+                  <div key={r.uid} style={{
+                    display:"grid",gridTemplateColumns:"60px 1fr 80px 80px 80px 100px",
+                    alignItems:"center",padding:"14px 20px",gap:8,
+                    borderBottom:"1px solid rgba(255,255,255,.04)",
+                    background:isElim?"rgba(239,83,80,.05)":(isMe?"rgba(249,168,37,.07)":"transparent"),
+                    borderLeft:isElim?"3px solid #ef5350":(isMe?"3px solid #f9a825":"3px solid transparent"),
+                    opacity:isElim?0.65:1,
+                  }}>
+                    <span style={{textAlign:"center",fontSize:i<3&&!isElim?24:16,fontWeight:700,color:isElim?"#546e7a":(i===0?"#f9a825":i===1?"#bdbdbd":i===2?"#a1887f":"#546e7a")}}>
+                      {isElim?"❌":(medals[i]||`#${i+1}`)}
+                    </span>
+                    <div>
+                      <div style={{fontWeight:i<3&&!isElim?800:500,fontSize:15,color:isElim?"#90a4ae":(isMe?"#f9a825":"#e0e0e0"),display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{textDecoration:isElim?"line-through":"none"}}>{r.name}</span>{r.isAdmin?" ⚙️":""}
+                        {isElim&&(
+                          <span style={{fontSize:10,fontWeight:800,color:"#ef5350",background:"rgba(239,83,80,.15)",border:"1px solid #ef5350",borderRadius:5,padding:"2px 7px",letterSpacing:1,textTransform:"uppercase",textDecoration:"none"}}>
+                            ELIMINADO
+                          </span>
+                        )}
+                      </div>
+                      {isMe&&!isElim&&<div style={{fontSize:10,color:"#f9a825",letterSpacing:1}}>▶ TÚ</div>}
+                    </div>
+                    <span style={{textAlign:"center",fontSize:15,fontWeight:700,color:isElim?"#546e7a":"#81c784"}}>{isElim?"—":(exactos||"—")}</span>
+                    <span style={{textAlign:"center",fontSize:15,fontWeight:700,color:isElim?"#546e7a":"#4fc3f7"}}>{isElim?"—":(tendencia||"—")}</span>
+                    <span style={{textAlign:"center",fontSize:15,fontWeight:700,color:isElim?"#546e7a":"#b0bec5"}}>{isElim?"—":(totalAciertos||"—")}</span>
+                    <span style={{textAlign:"right",fontSize:26,fontWeight:900,color:isElim?"#ef5350":(i===0?"#f9a825":i===1?"#bdbdbd":i===2?"#a1887f":"#e0e0e0")}}>{r.score}</span>
                   </div>
-                  <span style={{width:100,textAlign:"right",fontSize:26,fontWeight:900,color:i===0?"#f9a825":i===1?"#bdbdbd":i===2?"#a1887f":"#e0e0e0"}}>{r.score}</span>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+
+            {/* Leyenda */}
+            <div style={{display:"flex",gap:20,marginTop:14,flexWrap:"wrap"}}>
+              <div style={{fontSize:12,color:"#546e7a",display:"flex",alignItems:"center",gap:6}}>
+                <span style={{color:"#81c784",fontWeight:700}}>✅ Exacto</span> — marcador exacto acertado
+              </div>
+              <div style={{fontSize:12,color:"#546e7a",display:"flex",alignItems:"center",gap:6}}>
+                <span style={{color:"#4fc3f7",fontWeight:700}}>👍 Tendencia</span> — resultado correcto (G/E/P)
+              </div>
             </div>
           </div>
         )}
@@ -2152,6 +2330,7 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,
   const [deadlineInput,setDeadlineInput]=useState(phase2Deadline||"");
   const [showRanking,setShowRanking]=useState(false);
   const [copied,setCopied]=useState(false);
+  const [copiedAll,setCopiedAll]=useState(false);
 
   // Users who have NOT submitted yet
   const pending = Object.entries(allProfiles)
@@ -2160,10 +2339,23 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,
 
   const pendingEmails = pending.map(p=>p.email).filter(Boolean).join(", ");
 
+  // ALL participants (excluding admin)
+  const allParticipants = Object.entries(allProfiles)
+    .filter(([uid,p]) => !p.isAdmin)
+    .map(([uid,p]) => ({uid, name:p.name, email:p.email||""}));
+  const allEmails = allParticipants.map(p=>p.email).filter(Boolean).join(", ");
+
   function copyEmails(){
     navigator.clipboard.writeText(pendingEmails).then(()=>{
       setCopied(true);
       setTimeout(()=>setCopied(false), 2500);
+    });
+  }
+
+  function copyAllEmails(){
+    navigator.clipboard.writeText(allEmails).then(()=>{
+      setCopiedAll(true);
+      setTimeout(()=>setCopiedAll(false), 2500);
     });
   }
 
@@ -2259,19 +2451,33 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,
 
       {/* Ranking preview */}
       <div style={{...S.card,marginBottom:16}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <h3 style={S.cardTitle}>🏆 Ranking Actual ({allScores.length} participantes)</h3>
-          <button style={{...S.tab,fontSize:11}} onClick={()=>setShowRanking(s=>!s)}>
-            {showRanking?"Ocultar":"Ver ranking"}
-          </button>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button
+              style={{background:copiedAll?"linear-gradient(135deg,#1b5e20,#2e7d32)":"linear-gradient(135deg,#4a148c,#7b1fa2)",color:"#fff",border:"none",borderRadius:7,padding:"7px 14px",fontWeight:700,cursor:"pointer",fontSize:12,fontFamily:"inherit",transition:"all .2s"}}
+              onClick={copyAllEmails}>
+              {copiedAll?"✅ ¡Copiados!":"📧 Copiar todos los correos"}
+            </button>
+            <button style={{...S.tab,fontSize:11}} onClick={()=>setShowRanking(s=>!s)}>
+              {showRanking?"Ocultar":"Ver ranking"}
+            </button>
+          </div>
         </div>
         {showRanking&&(
           <div style={{marginTop:10}}>
             {allScores.map((r,i)=>(
-              <div key={r.uid} style={{display:"flex",alignItems:"center",padding:"8px 10px",borderBottom:"1px solid rgba(255,255,255,.04)",borderRadius:6}}>
-                <span style={{width:36,textAlign:"center",fontSize:18}}>{["🥇","🥈","🥉"][i]||`#${i+1}`}</span>
-                <span style={{flex:1,fontSize:13,color:"#cfd8dc"}}>{r.name}</span>
-                <span style={{fontWeight:800,fontSize:16,color:"#f9a825"}}>{r.score} pts</span>
+              <div key={r.uid} style={{display:"flex",alignItems:"center",padding:"8px 10px",borderBottom:"1px solid rgba(255,255,255,.04)",borderRadius:6,opacity:r.eliminated?0.65:1}}>
+                <span style={{width:36,textAlign:"center",fontSize:18}}>{r.eliminated?"❌":(["🥇","🥈","🥉"][i]||`#${i+1}`)}</span>
+                <span style={{flex:1,fontSize:13,color:"#cfd8dc",display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{textDecoration:r.eliminated?"line-through":"none"}}>{r.name}</span>
+                  {r.eliminated&&(
+                    <span style={{fontSize:9,fontWeight:800,color:"#ef5350",background:"rgba(239,83,80,.15)",border:"1px solid #ef5350",borderRadius:5,padding:"1px 6px",letterSpacing:.5,textTransform:"uppercase"}}>
+                      ELIMINADO
+                    </span>
+                  )}
+                </span>
+                <span style={{fontWeight:800,fontSize:16,color:r.eliminated?"#ef5350":"#f9a825"}}>{r.score} pts</span>
               </div>
             ))}
             {allScores.length===0&&<p style={{color:"#37474f",fontSize:13}}>Sin participantes aún.</p>}
@@ -2293,34 +2499,41 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,
         </div>
       )}
       <div style={S.card}>
-        {matches.map(m=>{
-          const res=results[m.id];
-          const [h,setH]=useState(res?.home??"");
-          const [a,setA]=useState(res?.away??"");
-          const saved=res&&res.home!=="";
-          const label=m.label||(m.home&&m.away?`${m.home} vs ${m.away}`:"");
-          return(
-            <div key={m.id} style={{...S.matchRow,...(saved?{borderLeft:"3px solid #81c784",paddingLeft:10}:{})}}>
-              <span style={{flex:1,fontSize:14,fontWeight:600,color:"#cfd8dc",minWidth:140}}>{label}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} placeholder="—"/>
-                <span style={{color:"#f9a825",fontWeight:900,fontSize:22}}>:</span>
-                <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} placeholder="—"/>
-                <button style={{background:"#1b5e20",border:"none",borderRadius:6,padding:"7px 14px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}
-                  onClick={()=>{if(h!==""&&a!=="")saveResult(m.id,h,a);}}>✓ Guardar</button>
-              </div>
-              {saved&&<span style={{color:"#81c784",fontSize:12}}>✓ {res.home}–{res.away}</span>}
-            </div>
-          );
-        })}
+        {matches.map(m=>(
+          <ResultRow key={m.id} m={m} res={results[m.id]} saveResult={saveResult}/>
+        ))}
       </div>
     </div>
   );
 }
 
-// ============================================================
-// COMPARATIVO PAGE
-// ============================================================
+// ── Fila individual de resultado (necesita su propio componente para poder usar useState) ──
+function ResultRow({m, res, saveResult}){
+  const [h,setH]=useState(res?.home??"");
+  const [a,setA]=useState(res?.away??"");
+  const saved=res&&res.home!=="";
+  const label=m.label||(m.home&&m.away?`${m.home} vs ${m.away}`:"");
+
+  // Sincronizar si el resultado externo cambia (otro admin lo guardó)
+  useEffect(()=>{
+    if(res?.home!==undefined) setH(res.home);
+    if(res?.away!==undefined) setA(res.away);
+  },[res?.home, res?.away]);
+
+  return(
+    <div key={m.id} style={{...S.matchRow,...(saved?{borderLeft:"3px solid #81c784",paddingLeft:10}:{})}}>
+      <span style={{flex:1,fontSize:14,fontWeight:600,color:"#cfd8dc",minWidth:140}}>{label}</span>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={h} onChange={e=>setH(e.target.value)} placeholder="—"/>
+        <span style={{color:"#f9a825",fontWeight:900,fontSize:22}}>:</span>
+        <input className="scoreIn" style={S.scoreIn} type="number" min="0" max="20" value={a} onChange={e=>setA(e.target.value)} placeholder="—"/>
+        <button style={{background:"#1b5e20",border:"none",borderRadius:6,padding:"7px 14px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}
+          onClick={()=>{if(h!==""&&a!=="")saveResult(m.id,h,a);}}>✓ Guardar</button>
+      </div>
+      {saved&&<span style={{color:"#81c784",fontSize:12}}>✓ {res.home}–{res.away}</span>}
+    </div>
+  );
+}
 function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, results, currentUid}){
   const [selGroup, setSelGroup] = useState("A");
   const [now, setNow] = useState(new Date());

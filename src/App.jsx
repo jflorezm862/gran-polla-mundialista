@@ -144,7 +144,7 @@ const ALL_MATCHES=[...GROUP_MATCHES,...KNOCKOUT_ROUNDS];
 const ELIMINATION_DEADLINE = new Date("2026-06-11T14:00:00-05:00");
 
 // Fecha/hora límite Fase 2 — Ronda de 32 (Lun 29 Jun 2026, 2:00 PM hora Colombia = UTC-5)
-const PHASE2_HARD_DEADLINE = new Date("2026-06-29T14:00:00-05:00");
+const PHASE2_HARD_DEADLINE = new Date("2026-06-28T14:00:00-05:00");
 
 const POINTS={
   groups:{exactScore:3,correctResult:1},
@@ -1403,7 +1403,7 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
                 ¡ATENCIÓN! FASE 2 — ELIMINATORIAS
               </div>
               <div style={{fontWeight:800,fontSize:15,color:"#fff",marginBottom:10,background:"rgba(239,83,80,.2)",borderRadius:8,padding:"10px 14px",border:"1px solid #ef5350"}}>
-                ⏰ Tienes hasta HOY LUNES 29 DE JUNIO A LAS 2:00 PM (hora Colombia) para completar y ENVIAR tus pronósticos de Eliminatorias.
+                ⏰ Tienes hasta HOY DOMINGO 28 DE JUNIO A LAS 2:00 PM (hora Colombia) para completar y ENVIAR tus pronósticos de Eliminatorias.
               </div>
               <div style={{fontSize:13,color:"#ffcdd2",lineHeight:1.7,marginBottom:12}}>
                 Los cruces reales de la Ronda de 32 están cargados. Ingresa tus pronósticos, luego haz click en
@@ -1427,7 +1427,7 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
             <span style={{fontSize:36}}>🔴</span>
             <div>
               <div style={{fontWeight:900,fontSize:16,color:"#ef5350",marginBottom:6}}>FASE 2 CERRADA</div>
-              <div style={{fontSize:13,color:"#b0bec5"}}>El plazo para enviar tus pronósticos de Eliminatorias venció el Lunes 29 de Junio a las 2:00 PM hora Colombia. No podrás participar en la etapa eliminatoria.</div>
+              <div style={{fontSize:13,color:"#b0bec5"}}>El plazo para enviar tus pronósticos de Eliminatorias venció el Domingo 28 de Junio a las 2:00 PM hora Colombia. No podrás participar en la etapa eliminatoria.</div>
             </div>
           </div>
         </div>
@@ -1440,7 +1440,7 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
             🚨 ¡FASE 2 ABIERTA — ACTÚA AHORA!
           </div>
           <div style={{fontWeight:800,fontSize:15,color:"#fff",marginBottom:10,background:"rgba(239,83,80,.2)",borderRadius:8,padding:"10px 14px",border:"1px solid #ef5350"}}>
-            ⏰ Tienes hasta HOY LUNES 29 DE JUNIO A LAS 2:00 PM (hora Colombia) para completar y ENVIAR.
+            ⏰ Tienes hasta HOY DOMINGO 28 DE JUNIO A LAS 2:00 PM (hora Colombia) para completar y ENVIAR.
           </div>
           <div style={{fontSize:13,color:"#ffcdd2",lineHeight:1.6,marginBottom:14}}>
             Los cruces reales están cargados. Ingresa tus pronósticos de la Ronda de 32, Octavos, Cuartos, Semis y Final.
@@ -1450,7 +1450,7 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
             <div style={{fontSize:12,color:"#546e7a",marginBottom:6}}>⏰ TIEMPO RESTANTE</div>
             <Countdown deadline={phase2Deadline||PHASE2_HARD_DEADLINE.toISOString()}/>
             <div style={{fontSize:11,color:"#546e7a",marginTop:6}}>
-              Fecha límite: Lunes 29 de junio de 2026, 2:00 p.m.
+              Fecha límite: Domingo 28 de junio de 2026, 2:00 p.m.
             </div>
           </div>
           <button style={{background:"linear-gradient(135deg,#c62828,#ef5350)",color:"#fff",border:"none",borderRadius:8,padding:"12px 28px",fontWeight:900,fontSize:15,cursor:"pointer",fontFamily:"inherit",letterSpacing:.5,boxShadow:"0 4px 12px rgba(239,83,80,.4)"}}

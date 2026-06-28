@@ -143,6 +143,9 @@ const ALL_MATCHES=[...GROUP_MATCHES,...KNOCKOUT_ROUNDS];
 // Fecha/hora límite: kickoff de México vs Sudáfrica (Jue 11 Jun 2026, 2:00 PM hora Colombia = UTC-5)
 const ELIMINATION_DEADLINE = new Date("2026-06-11T14:00:00-05:00");
 
+// Fecha/hora límite Fase 2 — Ronda de 32 (Lun 29 Jun 2026, 2:00 PM hora Colombia = UTC-5)
+const PHASE2_HARD_DEADLINE = new Date("2026-06-29T14:00:00-05:00");
+
 const POINTS={
   groups:{exactScore:3,correctResult:1},
   round32:{exactScore:4,correctResult:2},
@@ -922,6 +925,7 @@ export default function App(){
     if(isGroup && submitted) return;
     if(!isGroup && submitted2) return;
     if(!isGroup && !phase2Open) return; // fase 2 no abierta
+    if(!isGroup && new Date() >= PHASE2_HARD_DEADLINE) return; // cierre automático
     const entry={home:h,away:a};
     if(penHome!==""&&penAway!==""){entry.penHome=penHome;entry.penAway=penAway;}
     const updated={...myPreds,[id]:entry};
@@ -1390,24 +1394,40 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
       )}
 
       {/* ── PHASE 2 BANNER ── */}
-      {submitted && !phase2Open && (
-        <div style={{background:"rgba(21,101,192,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:12,padding:"20px",marginBottom:20}}>
+      {submitted && !phase2Open && new Date() < PHASE2_HARD_DEADLINE && (
+        <div style={{background:"rgba(239,83,80,.15)",border:"2px solid #ef5350",borderRadius:12,padding:"20px",marginBottom:20,animation:"pulse 2s infinite"}}>
           <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
-            <span style={{fontSize:32,flexShrink:0}}>⏳</span>
+            <span style={{fontSize:36,flexShrink:0}}>🚨</span>
             <div style={{flex:1}}>
-              <div style={{fontWeight:800,fontSize:16,color:"#4fc3f7",marginBottom:8}}>
-                FASE 2 — Eliminatorias
+              <div style={{fontWeight:900,fontSize:18,color:"#ef5350",marginBottom:8,letterSpacing:.5}}>
+                ¡ATENCIÓN! FASE 2 — ELIMINATORIAS
               </div>
-              <div style={{fontSize:13,color:"#b0bec5",lineHeight:1.7,marginBottom:12}}>
-                Una vez finalice la fase de grupos y se conozcan los <strong style={{color:"#fff"}}>32 clasificados y los cruces oficiales</strong>,
-                se abrirá nuevamente la polla para que completes tus pronósticos de eliminatorias,
-                cuartos, semis y la gran final.
+              <div style={{fontWeight:800,fontSize:15,color:"#fff",marginBottom:10,background:"rgba(239,83,80,.2)",borderRadius:8,padding:"10px 14px",border:"1px solid #ef5350"}}>
+                ⏰ Tienes hasta HOY LUNES 29 DE JUNIO A LAS 2:00 PM (hora Colombia) para completar y ENVIAR tus pronósticos de Eliminatorias.
               </div>
-              <div style={{background:"rgba(0,0,0,.3)",borderRadius:8,padding:"10px 14px",display:"inline-block"}}>
-                <div style={{fontSize:11,color:"#546e7a",letterSpacing:1,marginBottom:6}}>LA POLLA DE ELIMINATORIAS SE ABRIRÁ PRÓXIMAMENTE</div>
-                <div style={{fontSize:13,color:"#90a4ae"}}>📅 El último partido de grupos es el <strong style={{color:"#fff"}}>Sáb 27 Jun</strong></div>
-                <div style={{fontSize:13,color:"#90a4ae",marginTop:4}}>🔔 Recibirás una notificación cuando se abra la Fase 2</div>
+              <div style={{fontSize:13,color:"#ffcdd2",lineHeight:1.7,marginBottom:12}}>
+                Los cruces reales de la Ronda de 32 están cargados. Ingresa tus pronósticos, luego haz click en
+                <strong style={{color:"#ef5350"}}> 🔒 ENVIAR FASE 2</strong>.
+                <strong style={{color:"#ff8a80",display:"block",marginTop:8}}> ⚠️ Si no envías antes de las 2:00 PM de hoy quedarás DESCALIFICADO de la etapa eliminatoria.</strong>
               </div>
+              <div style={{marginBottom:12}}>
+                <Countdown deadline={PHASE2_HARD_DEADLINE}/>
+              </div>
+              <button style={{background:"linear-gradient(135deg,#c62828,#ef5350)",color:"#fff",border:"none",borderRadius:8,padding:"12px 28px",fontWeight:900,fontSize:15,cursor:"pointer",fontFamily:"inherit",letterSpacing:.5,boxShadow:"0 4px 12px rgba(239,83,80,.4)"}}
+                onClick={()=>setShowConfirm2(true)}>
+                🔒 ENVIAR FASE 2 AHORA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {submitted && !phase2Open && new Date() >= PHASE2_HARD_DEADLINE && !submitted2 && (
+        <div style={{background:"rgba(239,83,80,.1)",border:"2px solid #ef5350",borderRadius:12,padding:"20px",marginBottom:20}}>
+          <div style={{display:"flex",gap:12,alignItems:"center"}}>
+            <span style={{fontSize:36}}>🔴</span>
+            <div>
+              <div style={{fontWeight:900,fontSize:16,color:"#ef5350",marginBottom:6}}>FASE 2 CERRADA</div>
+              <div style={{fontSize:13,color:"#b0bec5"}}>El plazo para enviar tus pronósticos de Eliminatorias venció el Lunes 29 de Junio a las 2:00 PM hora Colombia. No podrás participar en la etapa eliminatoria.</div>
             </div>
           </div>
         </div>
@@ -1415,26 +1435,27 @@ function PredictPage({results,myPreds,myGrpP,myChamp,savePrediction,saveGroupRan
 
       {/* ── PHASE 2 OPEN — countdown + submit ── */}
       {submitted && phase2Open && !submitted2 && (
-        <div style={{background:"rgba(30,136,229,.12)",border:"2px solid #1e88e5",borderRadius:12,padding:"20px",marginBottom:20}}>
-          <div style={{fontWeight:800,fontSize:16,color:"#4fc3f7",marginBottom:8}}>
-            🚨 FASE 2 ABIERTA — ¡Completa tus pronósticos de Eliminatorias!
+        <div style={{background:"rgba(239,83,80,.15)",border:"2px solid #ef5350",borderRadius:12,padding:"20px",marginBottom:20}}>
+          <div style={{fontWeight:900,fontSize:18,color:"#ef5350",marginBottom:8}}>
+            🚨 ¡FASE 2 ABIERTA — ACTÚA AHORA!
           </div>
-          <div style={{fontSize:13,color:"#b0bec5",lineHeight:1.6,marginBottom:14}}>
+          <div style={{fontWeight:800,fontSize:15,color:"#fff",marginBottom:10,background:"rgba(239,83,80,.2)",borderRadius:8,padding:"10px 14px",border:"1px solid #ef5350"}}>
+            ⏰ Tienes hasta HOY LUNES 29 DE JUNIO A LAS 2:00 PM (hora Colombia) para completar y ENVIAR.
+          </div>
+          <div style={{fontSize:13,color:"#ffcdd2",lineHeight:1.6,marginBottom:14}}>
             Los cruces reales están cargados. Ingresa tus pronósticos de la Ronda de 32, Octavos, Cuartos, Semis y Final.
-            <strong style={{color:"#ef5350"}}> Tienes tiempo hasta:</strong>
+            <strong style={{color:"#ff8a80",display:"block",marginTop:8}}>⚠️ Si no envías antes de las 2:00 PM de hoy quedarás DESCALIFICADO de la etapa eliminatoria.</strong>
           </div>
-          {phase2Deadline && (
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:12,color:"#546e7a",marginBottom:6}}>⏰ TIEMPO RESTANTE</div>
-              <Countdown deadline={phase2Deadline}/>
-              <div style={{fontSize:11,color:"#546e7a",marginTop:6}}>
-                Fecha límite: {new Date(phase2Deadline).toLocaleString("es-CO",{weekday:"long",day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"})}
-              </div>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:"#546e7a",marginBottom:6}}>⏰ TIEMPO RESTANTE</div>
+            <Countdown deadline={phase2Deadline||PHASE2_HARD_DEADLINE.toISOString()}/>
+            <div style={{fontSize:11,color:"#546e7a",marginTop:6}}>
+              Fecha límite: Lunes 29 de junio de 2026, 2:00 p.m.
             </div>
-          )}
-          <button style={{background:"linear-gradient(135deg,#1565c0,#1e88e5)",color:"#fff",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",letterSpacing:.5}}
+          </div>
+          <button style={{background:"linear-gradient(135deg,#c62828,#ef5350)",color:"#fff",border:"none",borderRadius:8,padding:"12px 28px",fontWeight:900,fontSize:15,cursor:"pointer",fontFamily:"inherit",letterSpacing:.5,boxShadow:"0 4px 12px rgba(239,83,80,.4)"}}
             onClick={()=>setShowConfirm2(true)}>
-            🔒 ENVIAR FASE 2
+            🔒 ENVIAR FASE 2 AHORA
           </button>
         </div>
       )}

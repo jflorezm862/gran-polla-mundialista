@@ -820,15 +820,15 @@ export default function App(){
         });
 
         // ── Puntos por posición en grupos (1°=4pts, 2°=3pts, 3°=2pts, 4°=1pt) ──
-        const grpPreds = data.groups||{};
+        // Se calcula desde los pronósticos de partidos del usuario (no de data.groups)
         const GRP_POS_PTS = [4,3,2,1];
         Object.keys(GROUPS).forEach(g=>{
-          const userRanking = grpPreds[g]; // array de equipos en orden pronosticado
-          if(!userRanking||!Array.isArray(userRanking)) return;
-          // Calcular posición real basada en resultados reales
+          // Posición real (basada en resultados reales ingresados por admin)
           const realStandings = calcGroupStandings(g, results);
-          userRanking.forEach((team, idx)=>{
-            const realPos = realStandings.findIndex(s=>s.team===team);
+          // Posición pronosticada por el usuario (basada en sus pronósticos de partidos)
+          const userStandings = calcGroupStandings(g, preds);
+          userStandings.forEach((userTeam, idx)=>{
+            const realPos = realStandings.findIndex(s=>s.team===userTeam.team);
             if(realPos === idx) total += GRP_POS_PTS[idx]||0;
           });
         });

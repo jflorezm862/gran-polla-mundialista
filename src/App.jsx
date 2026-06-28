@@ -834,7 +834,26 @@ export default function App(){
         });
 
         if(eliminated) total=0;
-        scores.push({uid,name:prof.name,score:total,isAdmin:prof.isAdmin,eliminated});
+        // Calcular desglose: puntos de partidos vs puntos de posiciones
+        let matchPts=0;
+        ALL_MATCHES.filter(m=>m.phase==="groups").forEach(m=>{
+          const actual=results[m.id];
+          const pred=preds[m.id];
+          if(actual&&actual.home!==""&&actual.away!==""&&pred){
+            matchPts+=calcPoints(pred,actual,"groups");
+          }
+        });
+        let posPts=0;
+        Object.keys(GROUPS).forEach(g=>{
+          const realStandings2 = calcGroupStandings(g, results);
+          const userStandings2 = calcGroupStandings(g, preds);
+          const GRP_POS_PTS2=[4,3,2,1];
+          userStandings2.forEach((userTeam,idx)=>{
+            const realPos=realStandings2.findIndex(s=>s.team===userTeam.team);
+            if(realPos===idx) posPts+=GRP_POS_PTS2[idx]||0;
+          });
+        });
+        scores.push({uid,name:prof.name,score:total,matchPts,posPts,isAdmin:prof.isAdmin,eliminated});
       }
       scores.sort((a,b)=> (a.eliminated===b.eliminated) ? b.score-a.score : (a.eliminated?1:-1));
       setAllScores(scores);
@@ -1222,13 +1241,15 @@ export default function App(){
 
             <div style={{background:"#131d2e",borderRadius:12,overflow:"hidden",border:"1px solid #1a2f4a"}}>
               {/* Header tabla */}
-              <div style={{display:"grid",gridTemplateColumns:"60px 1fr 80px 80px 80px 100px",padding:"10px 20px",background:"rgba(255,255,255,.04)",fontSize:11,fontWeight:700,color:"#546e7a",letterSpacing:1.5,textTransform:"uppercase",borderBottom:"2px solid rgba(255,255,255,.06)",gap:8}}>
+              <div style={{display:"grid",gridTemplateColumns:"60px 1fr 80px 80px 80px 90px 90px 100px",padding:"10px 20px",background:"rgba(255,255,255,.04)",fontSize:11,fontWeight:700,color:"#546e7a",letterSpacing:1.5,textTransform:"uppercase",borderBottom:"2px solid rgba(255,255,255,.06)",gap:8}}>
                 <span style={{textAlign:"center"}}>POS</span>
                 <span>JUGADOR</span>
                 <span style={{textAlign:"center"}}>✅ EXACTO</span>
                 <span style={{textAlign:"center"}}>👍 TENDENCIA</span>
                 <span style={{textAlign:"center"}}>🎯 ACIERTOS</span>
-                <span style={{textAlign:"right"}}>PUNTOS</span>
+                <span style={{textAlign:"center",fontSize:10,color:"#4fc3f7"}}>⚽ PARTIDOS</span>
+                <span style={{textAlign:"center",fontSize:10,color:"#81c784"}}>📊 POSICIONES</span>
+                <span style={{textAlign:"right"}}>TOTAL</span>
               </div>
 
               {allScores.map((r,i)=>{
@@ -1249,7 +1270,7 @@ export default function App(){
                 const isElim = r.eliminated;
                 return(
                   <div key={r.uid} style={{
-                    display:"grid",gridTemplateColumns:"60px 1fr 80px 80px 80px 100px",
+                    display:"grid",gridTemplateColumns:"60px 1fr 80px 80px 80px 90px 90px 100px",
                     alignItems:"center",padding:"14px 20px",gap:8,
                     borderBottom:"1px solid rgba(255,255,255,.04)",
                     background:isElim?"rgba(239,83,80,.05)":(isMe?"rgba(249,168,37,.07)":"transparent"),
@@ -1273,6 +1294,8 @@ export default function App(){
                     <span style={{textAlign:"center",fontSize:15,fontWeight:700,color:isElim?"#546e7a":"#81c784"}}>{isElim?"—":(exactos||"—")}</span>
                     <span style={{textAlign:"center",fontSize:15,fontWeight:700,color:isElim?"#546e7a":"#4fc3f7"}}>{isElim?"—":(tendencia||"—")}</span>
                     <span style={{textAlign:"center",fontSize:15,fontWeight:700,color:isElim?"#546e7a":"#b0bec5"}}>{isElim?"—":(totalAciertos||"—")}</span>
+                    <span style={{textAlign:"center",fontSize:15,fontWeight:700,color:isElim?"#546e7a":"#4fc3f7"}}>{isElim?"—":(r.matchPts??"—")}</span>
+                    <span style={{textAlign:"center",fontSize:15,fontWeight:700,color:isElim?"#546e7a":"#81c784"}}>{isElim?"—":(r.posPts??"—")}</span>
                     <span style={{textAlign:"right",fontSize:26,fontWeight:900,color:isElim?"#ef5350":(i===0?"#f9a825":i===1?"#bdbdbd":i===2?"#a1887f":"#e0e0e0")}}>{r.score}</span>
                   </div>
                 );

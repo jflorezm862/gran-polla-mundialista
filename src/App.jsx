@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -2670,6 +2670,17 @@ function ComparativoPage({allProfiles, allPredictions, allChamps, allSubmitted, 
       : KNOCKOUT_ROUNDS.filter(m=>m.phase===compPhase);
   const compPointsKey = compPhase==="groups"?"groups":compPhase==="round32"?"round32":compPhase==="round16"?"round16":compPhase==="quarters"?"quarters":compPhase==="semis"?"semis":compPhase==="third"?"semis":"final";
 
+  // Bracket personal por jugador — calcula automáticamente qué cruces (equipos) generó
+  // cada participante en Octavos, Cuartos, Semis y Final según sus pronósticos de Ronda 32
+  const playerBrackets = useMemo(()=>{
+    if(compPhase==="groups"||compPhase==="round32"||compPhase==="champion") return {};
+    const out={};
+    players.forEach(p=>{
+      out[p.uid] = buildPersonalBracket(allPredictions[p.uid]||{});
+    });
+    return out;
+  },[players, allPredictions, compPhase]);
+
   function getCellStyle(pred, actual){
     if(!actual || actual.home === "") return {};
     if(!pred || pred.home === "") return {};
@@ -2870,10 +2881,11 @@ function ComparativoPage({allProfiles, allPredictions, allChamps, allSubmitted, 
               {matches.map((m,i)=>{
                 const actual = results[m.id];
                 const hasResult = actual && actual.home !== "";
+                const isPersonal = compPhase!=="groups" && compPhase!=="round32";
                 return(
                   <tr key={m.id} style={{borderBottom:"1px solid rgba(255,255,255,.04)",background:i%2===0?"transparent":"rgba(255,255,255,.02)"}}>
                     <td style={{padding:"7px 10px",fontWeight:600,color:"#cfd8dc",position:"sticky",left:0,background:i%2===0?"#0f1624":"#131d2e",zIndex:1,fontSize:11}}>
-                      {m.home} vs {m.away}
+                      {isPersonal ? (m.label||m.id) : `${m.home} vs ${m.away}`}
                       {m.date&&<div style={{fontSize:9,color:"#546e7a",marginTop:1}}>📅 {m.date} {m.time&&`· ${m.time}`}</div>}
                     </td>
                     <td style={{padding:"7px 10px",textAlign:"center",fontWeight:800,
@@ -2883,6 +2895,8 @@ function ComparativoPage({allProfiles, allPredictions, allChamps, allSubmitted, 
                       {hasResult?`${actual.home}–${actual.away}`:"—"}
                     </td>
                     {players.map(p=>{
+                      const pBracket = isPersonal ? playerBrackets[p.uid] : null;
+                      const pMatch = isPersonal ? pBracket?.[m.id] : m;
                       const pred = allPredictions[p.uid]?.[m.id];
                       const hasPred = pred && pred.home!=="" && pred.away!=="";
                       const cs = hasResult?getCellStyle(pred,actual):{};
@@ -2892,8 +2906,11 @@ function ComparativoPage({allProfiles, allPredictions, allChamps, allSubmitted, 
                           fontWeight:hasPred?700:400,
                           color:cs.color||(hasPred?"#b0bec5":"#37474f"),
                           background:cs.background||(p.uid===currentUid?"rgba(249,168,37,.04)":"transparent"),
-                          fontSize:12,whiteSpace:"nowrap",
+                          fontSize:11,whiteSpace:"nowrap",
                         }}>
+                          {isPersonal && pMatch && (
+                            <div style={{fontSize:9,color:"#64748b",marginBottom:2}}>{pMatch.home} vs {pMatch.away}</div>
+                          )}
                           {hasPred?`${pred.home}–${pred.away}`:"—"}
                         </td>
                       );

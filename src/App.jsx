@@ -821,7 +821,7 @@ export default function App(){
         const submittedAt2Ms = data.submittedAt2?.toMillis ? data.submittedAt2.toMillis() : null;
         const sentOnTime2 = data.submitted2===true && submittedAt2Ms!==null && submittedAt2Ms <= PHASE2_HARD_DEADLINE.getTime();
         submitted2Map[uid] = data.submitted2===true;
-        eliminated2Map[uid] = !prof.isAdmin && !sentOnTime2;
+        eliminated2Map[uid] = !prof.isAdmin && !sentOnTime2 && !PHASE2_EXCEPTION_NAMES.includes(prof.name);
 
         // ── Eliminación: no envió Fase 1, o la envió después del kickoff de México vs Sudáfrica ──
         const submittedAtMs = data.submittedAt?.toMillis ? data.submittedAt.toMillis() : null;

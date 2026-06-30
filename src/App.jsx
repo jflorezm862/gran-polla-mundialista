@@ -713,6 +713,9 @@ export default function App(){
   const [myChamp,setMyChamp]=useState({});
   const [allScores,setAllScores]=useState([]);
   const [allPredictions,setAllPredictions]=useState({});
+  const [allChamps,setAllChamps]=useState({});
+  const [allSubmitted2,setAllSubmitted2]=useState({});
+  const [allEliminated2,setAllEliminated2]=useState({});
   const [allSubmitted,setAllSubmitted]=useState({}); // {uid: {matches:{...}}}
   const [submitted,setSubmitted]=useState(false);
   const [submitted2,setSubmitted2]=useState(false); // fase 2 bloqueada
@@ -797,13 +800,24 @@ export default function App(){
     const fetchScores=async()=>{
       const scores=[];
       const allPreds={};
+      const allChamps={};
       const submittedMap={};
+      const submitted2Map={};
+      const eliminated2Map={};
       for(const [uid,prof] of Object.entries(allProfiles)){
         const snap=await getDoc(doc(db,"predictions",uid));
         const data=snap.exists()?snap.data():{};
         const preds=data.matches||{};
+        const champ=data.champ||{};
         allPreds[uid]=preds;
+        allChamps[uid]=champ;
         submittedMap[uid]=data.submitted===true;
+
+        // ── Eliminación Fase 2: no envió antes del primer partido de Ronda 32 (PHASE2_HARD_DEADLINE) ──
+        const submittedAt2Ms = data.submittedAt2?.toMillis ? data.submittedAt2.toMillis() : null;
+        const sentOnTime2 = data.submitted2===true && submittedAt2Ms!==null && submittedAt2Ms <= PHASE2_HARD_DEADLINE.getTime();
+        submitted2Map[uid] = data.submitted2===true;
+        eliminated2Map[uid] = !prof.isAdmin && !sentOnTime2;
 
         // ── Eliminación: no envió Fase 1, o la envió después del kickoff de México vs Sudáfrica ──
         const submittedAtMs = data.submittedAt?.toMillis ? data.submittedAt.toMillis() : null;
@@ -858,7 +872,10 @@ export default function App(){
       scores.sort((a,b)=> (a.eliminated===b.eliminated) ? b.score-a.score : (a.eliminated?1:-1));
       setAllScores(scores);
       setAllPredictions(allPreds);
+      setAllChamps(allChamps);
       setAllSubmitted(submittedMap);
+      setAllSubmitted2(submitted2Map);
+      setAllEliminated2(eliminated2Map);
     };
     fetchScores();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1202,7 +1219,9 @@ export default function App(){
           <ComparativoPage
             allProfiles={allProfiles}
             allPredictions={allPredictions}
+            allChamps={allChamps}
             allSubmitted={allSubmitted}
+            allEliminated2={allEliminated2}
             allScores={allScores}
             results={results}
             currentUid={fbUser?.uid}
@@ -2596,7 +2615,7 @@ function ResultRow({m, res, saveResult}){
     </div>
   );
 }
-function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, results, currentUid, phase2Closed}){
+function ComparativoPage({allProfiles, allPredictions, allChamps, allSubmitted, allEliminated2, allScores, results, currentUid, phase2Closed}){
   const [selGroup, setSelGroup] = useState("A");
   const [compPhase, setCompPhase] = useState("groups");
   const [now, setNow] = useState(new Date());
@@ -2630,7 +2649,7 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
   // Only show players who submitted phase 1
   const players = Object.entries(allProfiles)
     .filter(([uid]) => allSubmitted[uid] === true)
-    .map(([uid, p]) => ({uid, name: p.name}))
+    .map(([uid, p]) => ({uid, name: p.name, eliminated2: allEliminated2?.[uid]===true}))
     .sort((a,b) => a.name.localeCompare(b.name));
 
   const COMP_PHASES = [
@@ -2641,8 +2660,10 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
     {key:"semis",   label:"Semis"},
     {key:"third",   label:"3er Lugar"},
     {key:"final",   label:"Final"},
+    {key:"champion",label:"🏆 Campeón"},
   ];
-  const matches = compPhase==="groups"
+  const matches = compPhase==="champion" ? []
+    : compPhase==="groups"
     ? GROUP_MATCHES.filter(m => m.group === selGroup)
     : compPhase==="round32"
       ? REAL_R32
@@ -2728,7 +2749,7 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
         </div>
       )}
 
-      {compPhase!=="groups" && !phase2Closed && (
+      {compPhase!=="groups" && compPhase!=="champion" && !phase2Closed && (
         <div style={{background:"rgba(21,101,192,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:16,padding:"40px 24px",textAlign:"center",marginTop:8}}>
           <div style={{fontSize:52,marginBottom:12}}>🔒</div>
           <h3 style={{fontSize:20,fontWeight:800,color:"#4fc3f7",marginBottom:10}}>
@@ -2742,7 +2763,75 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
       )}
 
 
-      {(compPhase==="groups"||phase2Closed) && players.length === 0 && (
+      {compPhase==="champion" && !phase2Closed && (
+        <div style={{background:"rgba(21,101,192,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:16,padding:"40px 24px",textAlign:"center",marginTop:8}}>
+          <div style={{fontSize:52,marginBottom:12}}>🔒</div>
+          <h3 style={{fontSize:20,fontWeight:800,color:"#4fc3f7",marginBottom:10}}>
+            Pronósticos de Campeón bloqueados
+          </h3>
+          <p style={{color:"#90a4ae",fontSize:14,lineHeight:1.7,maxWidth:480,margin:"0 auto"}}>
+            Se publicarán automáticamente una vez cierre el plazo de envío de Fase 2.
+          </p>
+        </div>
+      )}
+
+      {compPhase==="champion" && phase2Closed && (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:600}}>
+            <thead>
+              <tr style={{borderBottom:"2px solid #1a2f4a"}}>
+                <th style={{padding:"8px 10px",textAlign:"left",color:"#546e7a",fontWeight:700,fontSize:11,letterSpacing:.5,textTransform:"uppercase",minWidth:140,position:"sticky",left:0,background:"#131d2e",zIndex:2}}>
+                  Posición
+                </th>
+                {players.map(p=>(
+                  <th key={p.uid} style={{
+                    padding:"8px 8px",textAlign:"center",
+                    color: p.eliminated2?"#ef5350":(p.uid===currentUid?"#f9a825":"#90a4ae"),
+                    fontWeight: p.uid===currentUid?800:600,
+                    fontSize:11,whiteSpace:"nowrap",minWidth:90,
+                    background: p.uid===currentUid?"rgba(249,168,37,.08)":"#131d2e",
+                    opacity: p.eliminated2?0.6:1,
+                  }}>
+                    {p.name.split(" ")[0]}
+                    {p.uid===currentUid&&<div style={{fontSize:9,color:"#f9a825"}}>▶ TÚ</div>}
+                    {p.eliminated2&&<div style={{fontSize:9,color:"#ef5350"}}>❌ ELIMINADO</div>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                {key:"champion",label:"🥇 Campeón"},
+                {key:"runnerUp",label:"🥈 Subcampeón"},
+                {key:"third",label:"🥉 Tercer Lugar"},
+                {key:"fourth",label:"4° Lugar"},
+              ].map((f,i)=>(
+                <tr key={f.key} style={{borderBottom:"1px solid rgba(255,255,255,.04)",background:i%2===0?"transparent":"rgba(255,255,255,.02)"}}>
+                  <td style={{padding:"7px 10px",fontWeight:600,color:"#cfd8dc",position:"sticky",left:0,background:i%2===0?"#0f1624":"#131d2e",zIndex:1,fontSize:12}}>
+                    {f.label}
+                  </td>
+                  {players.map(p=>{
+                    const val = allChamps?.[p.uid]?.[f.key] || "—";
+                    return(
+                      <td key={p.uid} style={{
+                        padding:"7px 6px",textAlign:"center",
+                        fontWeight: val!=="—"?700:400,
+                        color: val!=="—"?"#b0bec5":"#37474f",
+                        background:p.uid===currentUid?"rgba(249,168,37,.04)":"transparent",
+                        fontSize:12,whiteSpace:"nowrap",
+                      }}>
+                        {val}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {compPhase!=="champion" && (compPhase==="groups"||phase2Closed) && players.length === 0 && (
         <div style={S.card}>
           <p style={{color:"#37474f",textAlign:"center",padding:"20px 0"}}>
             Ningún participante ha enviado su Fase 1 aún.
@@ -2750,7 +2839,7 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
         </div>
       )}
 
-      {(compPhase==="groups"||phase2Closed) && players.length > 0 && (
+      {compPhase!=="champion" && (compPhase==="groups"||phase2Closed) && players.length > 0 && (
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:600}}>
             <thead>
@@ -2764,13 +2853,15 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
                 {players.map(p=>(
                   <th key={p.uid} style={{
                     padding:"8px 8px",textAlign:"center",
-                    color: p.uid===currentUid?"#f9a825":"#90a4ae",
+                    color: p.eliminated2&&compPhase!=="groups"?"#ef5350":(p.uid===currentUid?"#f9a825":"#90a4ae"),
                     fontWeight: p.uid===currentUid?800:600,
                     fontSize:11,whiteSpace:"nowrap",minWidth:76,
                     background: p.uid===currentUid?"rgba(249,168,37,.08)":"#131d2e",
+                    opacity: p.eliminated2&&compPhase!=="groups"?0.6:1,
                   }}>
                     {p.name.split(" ")[0]}
                     {p.uid===currentUid&&<div style={{fontSize:9,color:"#f9a825"}}>▶ TÚ</div>}
+                    {p.eliminated2&&compPhase!=="groups"&&<div style={{fontSize:9,color:"#ef5350"}}>❌ ELIMINADO</div>}
                   </th>
                 ))}
               </tr>

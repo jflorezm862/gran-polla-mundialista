@@ -386,7 +386,7 @@ const REAL_R32 = [
   {id:"R32_9",  home:"Bélgica",        away:"Senegal",            date:"Mié 1 Jul",  city:"Seattle"},
   {id:"R32_10", home:"Estados Unidos", away:"Bosnia H.",          date:"Mié 1 Jul",  city:"Santa Clara"},
   {id:"R32_11", home:"España",         away:"Austria",            date:"Jue 2 Jul",  city:"Los Ángeles"},
-  {id:"R32_12", home:"RD Congo",       away:"Ghana",              date:"Jue 2 Jul",  city:"Toronto"},
+  {id:"R32_12", home:"Portugal",        away:"Croacia",             date:"Jue 2 Jul",  city:"Toronto"},
   {id:"R32_13", home:"Suiza",          away:"Argelia",            date:"Jue 2 Jul",  city:"Vancouver"},
   {id:"R32_14", home:"Australia",      away:"Egipto",             date:"Vie 3 Jul",  city:"Dallas"},
   {id:"R32_15", home:"Argentina",      away:"Cabo Verde",         date:"Vie 3 Jul",  city:"Miami"},

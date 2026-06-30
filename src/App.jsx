@@ -1206,6 +1206,7 @@ export default function App(){
             allScores={allScores}
             results={results}
             currentUid={fbUser?.uid}
+            phase2Closed={new Date() >= PHASE2_HARD_DEADLINE}
           />
         )}
 
@@ -2425,7 +2426,9 @@ function AdminPage({results,saveResult,phase2Open,phase2Deadline,adminSetPhase2,
   ];
   const matches=phase==="groups"
     ?GROUP_MATCHES.filter(m=>m.group===selGrp)
-    :KNOCKOUT_ROUNDS.filter(m=>m.phase===phase);
+    :phase==="round32"
+      ?REAL_R32.map(r=>({...r, phase:"round32"}))
+      :KNOCKOUT_ROUNDS.filter(m=>m.phase===phase);
 
   return(
     <div style={S.section}>
@@ -2593,8 +2596,9 @@ function ResultRow({m, res, saveResult}){
     </div>
   );
 }
-function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, results, currentUid}){
+function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, results, currentUid, phase2Closed}){
   const [selGroup, setSelGroup] = useState("A");
+  const [compPhase, setCompPhase] = useState("groups");
   const [now, setNow] = useState(new Date());
 
   // First match: Mexico vs Sudafrica - Jun 11 2026 2:00 PM COL (UTC-5) = 19:00 UTC
@@ -2629,13 +2633,27 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
     .map(([uid, p]) => ({uid, name: p.name}))
     .sort((a,b) => a.name.localeCompare(b.name));
 
-  const matches = GROUP_MATCHES.filter(m => m.group === selGroup);
+  const COMP_PHASES = [
+    {key:"groups",  label:"Grupos"},
+    {key:"round32", label:"Ronda 32"},
+    {key:"round16", label:"Octavos"},
+    {key:"quarters",label:"Cuartos"},
+    {key:"semis",   label:"Semis"},
+    {key:"third",   label:"3er Lugar"},
+    {key:"final",   label:"Final"},
+  ];
+  const matches = compPhase==="groups"
+    ? GROUP_MATCHES.filter(m => m.group === selGroup)
+    : compPhase==="round32"
+      ? REAL_R32
+      : KNOCKOUT_ROUNDS.filter(m=>m.phase===compPhase);
+  const compPointsKey = compPhase==="groups"?"groups":compPhase==="round32"?"round32":compPhase==="round16"?"round16":compPhase==="quarters"?"quarters":compPhase==="semis"?"semis":compPhase==="third"?"semis":"final";
 
   function getCellStyle(pred, actual){
     if(!actual || actual.home === "") return {};
     if(!pred || pred.home === "") return {};
-    const pts = calcPoints(pred, actual, "groups");
-    const max = POINTS.groups.exactScore;
+    const pts = calcPoints(pred, actual, compPointsKey);
+    const max = POINTS[compPointsKey]?.exactScore || POINTS.groups.exactScore;
     if(pts === max) return {background:"rgba(129,199,132,.18)", color:"#81c784"};
     if(pts > 0)     return {background:"rgba(249,168,37,.12)", color:"#f9a825"};
     return {background:"rgba(239,83,80,.08)", color:"#ef5350"};
@@ -2688,17 +2706,43 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
         </span>
       </p>
 
-      {/* Group selector */}
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
-        {Object.keys(GROUPS).map(g=>(
-          <button key={g} onClick={()=>setSelGroup(g)}
-            style={{...S.groupTab,...(selGroup===g?S.groupTabActive:{})}}>
-            {g}
+      {/* Phase tabs */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+        {COMP_PHASES.map(p=>(
+          <button key={p.key} onClick={()=>setCompPhase(p.key)}
+            style={{...S.tab,...(compPhase===p.key?S.tabActive:{})}}>
+            {p.label}
           </button>
         ))}
       </div>
 
-      {players.length === 0 && (
+      {/* Group selector — solo en fase de grupos */}
+      {compPhase==="groups" && (
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+          {Object.keys(GROUPS).map(g=>(
+            <button key={g} onClick={()=>setSelGroup(g)}
+              style={{...S.groupTab,...(selGroup===g?S.groupTabActive:{})}}>
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {compPhase!=="groups" && !phase2Closed && (
+        <div style={{background:"rgba(21,101,192,.12)",border:"1px solid rgba(30,136,229,.3)",borderRadius:16,padding:"40px 24px",textAlign:"center",marginTop:8}}>
+          <div style={{fontSize:52,marginBottom:12}}>🔒</div>
+          <h3 style={{fontSize:20,fontWeight:800,color:"#4fc3f7",marginBottom:10}}>
+            Pronósticos de Eliminatorias bloqueados
+          </h3>
+          <p style={{color:"#90a4ae",fontSize:14,lineHeight:1.7,maxWidth:480,margin:"0 auto"}}>
+            Los pronósticos de la Fase 2 (Ronda de 32 en adelante) se publicarán
+            automáticamente una vez cierre el plazo de envío.
+          </p>
+        </div>
+      )}
+
+
+      {(compPhase==="groups"||phase2Closed) && players.length === 0 && (
         <div style={S.card}>
           <p style={{color:"#37474f",textAlign:"center",padding:"20px 0"}}>
             Ningún participante ha enviado su Fase 1 aún.
@@ -2706,7 +2750,7 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
         </div>
       )}
 
-      {players.length > 0 && (
+      {(compPhase==="groups"||phase2Closed) && players.length > 0 && (
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:600}}>
             <thead>
@@ -2770,7 +2814,7 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
             <tfoot>
               <tr style={{borderTop:"2px solid #1a2f4a",background:"rgba(255,255,255,.04)"}}>
                 <td style={{padding:"8px 10px",fontWeight:800,color:"#f9a825",fontSize:11,position:"sticky",left:0,background:"rgba(21,37,61,.95)"}}>
-                  PUNTOS GRUPO {selGroup}
+                  PUNTOS {compPhase==="groups"?`GRUPO ${selGroup}`:COMP_PHASES.find(p=>p.key===compPhase)?.label.toUpperCase()}
                 </td>
                 <td></td>
                 {players.map(p=>{
@@ -2779,7 +2823,7 @@ function ComparativoPage({allProfiles, allPredictions, allSubmitted, allScores, 
                   matches.forEach(m=>{
                     const actual=results[m.id];
                     const pred=preds[m.id];
-                    if(actual&&pred) pts+=calcPoints(pred,actual,"groups");
+                    if(actual&&pred) pts+=calcPoints(pred,actual,compPointsKey);
                   });
                   return(
                     <td key={p.uid} style={{
